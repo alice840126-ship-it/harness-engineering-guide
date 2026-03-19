@@ -13,6 +13,9 @@
 | **뉴스 스크래핑** | `news_scraper.py` | 네이버 뉴스 수집 + 필터링 | 5개 파일 |
 | **옵시디언 작성** | `obsidian_writer.py` | 옵시디언 노트 저장 | 3개 파일 |
 | **뉴스 분석** | `news_analyzer.py` | 뉴스 키워드 추출/테마 분석 | 2개 파일 |
+| **데일리 노트 생성** | `obsidian_note_creator.py` | 옵시디언 데일리 노트 자동 생성 | 1개 파일 |
+| **컨텍스트 수집** | `context_collector.py` | Claude 세션에서 패턴/선호도 추출 | 1개 파일 |
+| **캘린더 도우미** | `calendar_helper.py` | Google Calendar 일정 조회 | 3개 파일 |
 
 ## 🔧 에이전트 사용법
 
