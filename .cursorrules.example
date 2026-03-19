@@ -1,0 +1,84 @@
+# 🤖 Claude Code 작업 규칙 (하네스 엔지니어링)
+
+이 프로젝트는 **에이전트 기반 아키텍처**를 따릅니다.
+
+## 📁 핵심 폴더 구조
+
+```
+~/.claude/
+├── agents/           # 재사용 가능한 에이전트 (단일 책임)
+│   ├── telegram_sender.py
+│   ├── summarizer.py
+│   └── README.md
+├── orchestrators/    # 에이전트 조립 (연결만 담당)
+└── tests/           # 에이전트 단위 테스트
+```
+
+## 🎯 작업 시 항상 먼저 할 것
+
+### 1. 에이전트 재사용 확인
+복잡한 작업을 시작하기 전에 먼저 이런 질문을 하세요:
+- "agents/ 폴더에 이미 있는 에이전트인가요?"
+- "재사용할 수 있는 에이전트가 있나요?"
+
+### 2. 에이전트 분리 원칙
+새로운 기능을 만들 때 반드시 에이전트로 분리하세요:
+- **❌ 나쁜**: 한 함수에 스크래핑 + 요약 + 발송 다 때려넣기
+- **✅ 좋음**: 각각 독립 에이전트로 분리
+
+### 3. 단일 책임 원칙
+각 에이전트는 **하나의 일**만 하도록 설계:
+- 텔레그램 발송은 `telegram_sender.py`만
+- 요약은 `summarizer.py`만
+
+### 4. 명시적 인터페이스
+에이전트의 입력/출력을 명확히 정의하세요:
+```python
+class MyAgent:
+    def process(self, input_data: dict) -> dict:
+        """입력/출력 명확히 정의"""
+        return result
+```
+
+### 5. PRD 작성
+새 에이전트를 만들 때 `agents/AGENT_TEMPLATE.md`를 참고해서 PRD를 작성하세요.
+
+### 6. 테스트 작성
+에이전트를 수정하면 `tests/` 폴더에서 테스트하세요:
+```bash
+python3 ~/.claude/tests/test_telegram_sender.py
+```
+
+## 📋 코드 컨벤션
+
+- 함수명: `snake_case` (예: `send_telegram`)
+- 클래스명: `PascalCase` (예: `TelegramSender`)
+- 상수: `UPPER_SNAKE_CASE` (예: `BOT_TOKEN`)
+- docstring: 모든 함수/클래스에 문서화
+
+## 🔧 작업 순서 (하네스 방식)
+
+1. **기존 에이전트 확인** → `agents/README.md` 확인
+2. **에이전트 분리** → 단일 책임 원칙 적용
+3. **오케스트레이션** → 에이전트들을 조립
+4. **테스트** → `tests/`에서 단위 테스트 실행
+5. **문서화** → PRD와 README 업데이트
+
+## ⚠️ 하지 말 것 (안티패턴)
+
+- 거대한 스크립트에 모든 것을 때려넣기
+- 재사용 가능한 코드를 매번 다시 작성
+- 에이전트 없이 orchestrator만 만들기
+- 문서화 없이 코드만 작성
+
+## ✅ 권장 것
+
+- 작게 시작해서 점진적으로 확장
+- 테스트를 먼저 작성하고 나중에 구현
+- 기존 에이전트를 적극적으로 재사용
+- 명확한 문서화
+
+---
+
+**목표**: AI가 안정적이고 반복 가능한 결과를 내도록 환경 설정
+**참고**: [하네스 엔지니어링 완전 가이드](https://www.nxcode.io/ko/resources/news/harness-engineering-complete-guide-ai-agent-codex-2026)
