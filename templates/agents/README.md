@@ -17,7 +17,115 @@
 | **컨텍스트 수집** | `context_collector.py` | Claude 세션에서 패턴/선호도 추출 | 1개 파일 |
 | **캘린더 도우미** | `calendar_helper.py` | Google Calendar 일정 조회 | 3개 파일 |
 
-## 🔧 에이전트 사용법
+### 🆕 v2 에이전트 (BaseAgent 기반)
+
+| 에이전트 | 파일 | 목적 | 특징 |
+|---------|------|------|------|
+| **BaseAgent** | `base_agent.py` | 표준 인터페이스 | 모든 에이전트의 기본 클래스 |
+| **PipelineAgent** | `pipeline_agent.py` | 에이전트 오케스트레이션 | 순차/조건부/병렬 실행 |
+| **TelegramSender v2** | `telegram_sender_v2.py` | 텔레그램 발송 | BaseAgent 상속, operation 기반 |
+| **Summarizer v2** | `summarizer_v2.py` | 요약 | BaseAgent 상속, 다중 operation |
+| **NewsScraper v2** | `news_scraper_v2.py` | 뉴스 스크래핑 | BaseAgent 상속, 필터 내장 |
+| **ObsidianWriter v2** | `obsidian_writer_v2.py` | 옵시디언 작성 | BaseAgent 상속, 5가지 operation |
+| **CalendarHelper v2** | `calendar_helper_v2.py` | 캘린더 조회 | BaseAgent 상속, gog CLI |
+| **ContextCollector v2** | `context_collector_v2.py` | 컨텍스트 수집 | BaseAgent 상속, 패턴 분석 |
+| **DuplicateFilter v2** | `duplicate_filter_v2.py` | 중복 필터링 | BaseAgent 상속, JSON DB |
+| **WebContentReader v2** | `web_content_reader_v2.py` | 웹 콘텐츠 추출 | BaseAgent 상속, trafilatura |
+| **MultiLocationRecorder v2** | `multi_location_recorder_v2.py` | 다중 위치 기록 | BaseAgent 상속, 4곳 동시 저장 |
+| **NotebookLMAnalyzer v2** | `notebooklm_analyzer_v2.py` | NotebookLM 분석 | BaseAgent 상속, CLI 래퍼 |
+| **ObsidianNoteCreator v2** | `obsidian_note_creator_v2.py` | 데일리 노트 생성 | BaseAgent 상속, YAML 지원 |
+| **MultiPlatformSearcher v2** | `multi_platform_searcher_v2.py` | 다중 플랫폼 검색 | BaseAgent 상속, 네이버/통합 |
+| **PPTXStyleRecommender v2** | `pptx_style_recommender_v2.py` | PPTX 스타일 추천 | BaseAgent 상속, 키워드 분석 |
+| **NewsAnalyzer v2** | `news_analyzer_v2.py` | 뉴스 분석 | BaseAgent 상속 |
+
+## 🔧 에이전트 사용법 (v2)
+
+### BaseAgent 기반 에이전트
+
+```python
+from agents.news_analyzer_v2 import NewsAnalyzer
+
+# 에이전트 생성
+analyzer = NewsAnalyzer()
+
+# 표준 인터페이스로 실행
+result = analyzer.run({
+    "articles": [...],
+    "operation": "insights",
+    "date_range": "2026-03-21"
+})
+
+# 통계 확인
+print(analyzer.get_stats())
+# {"runs": 1, "errors": 0, "last_run": "2026-03-21T10:00:00"}
+```
+
+### PipelineAgent - 순차 실행
+
+```python
+from agents.pipeline_agent import PipelineAgent
+from agents.news_analyzer_v2 import NewsAnalyzer
+
+# 파이프라인 조립
+pipeline = PipelineAgent(
+    name="daily_news_pipeline",
+    agents=[
+        ScraperAgent(),      # 뉴스 수집
+        NewsAnalyzer(),      # 뉴스 분석
+        SummarizerAgent()    # 요약
+    ],
+    stop_on_error=False     # 에러가 발생해도 계속
+)
+
+# 실행
+result = pipeline.run({"query": "부동산"})
+
+# 파이프라인 내 에이전트 확인
+print(pipeline.get_agents())
+# ["news_scraper", "news_analyzer", "summarizer"]
+```
+
+### ConditionalPipelineAgent - 조건부 실행
+
+```python
+from agents.pipeline_agent import ConditionalPipelineAgent
+
+# 카테고리별 분기
+def category_condition(data):
+    if "부동산" in data.get("query", ""):
+        return "real_estate"
+    elif "주식" in data.get("query", ""):
+        return "stock"
+    return "general"
+
+# 분기별 에이전트 구성
+conditional_pipeline = ConditionalPipelineAgent(
+    name="smart_news_pipeline",
+    branches={
+        "real_estate": [NewsAnalyzer({"focus": "부동산"})],
+        "stock": [NewsAnalyzer({"focus": "금융"})],
+        "general": [NewsAnalyzer()]
+    },
+    condition=category_condition
+)
+```
+
+### ParallelPipelineAgent - 병렬 실행
+
+```python
+from agents.pipeline_agent import ParallelPipelineAgent
+
+# 여러 분석을 병렬로 실행
+parallel_pipeline = ParallelPipelineAgent(
+    name="multi_analysis_pipeline",
+    agents=[...],
+    merge_strategy="combine"  # combine, first, all
+)
+
+result = parallel_pipeline.run({"articles": [...]})
+```
+
+## 🔧 에이전트 사용법 (v1 - 기존)
 
 ### 1. 텔레그램 발송
 
@@ -145,16 +253,64 @@ sentiment = analyzer.calculate_sentiment("주가 상승, 성장세 지속")
 # {'score': 0.5, 'label': '긍정', 'positive': 2, 'negative': 0}
 ```
 
+## 🚀 오케스트레이터 (실전 파이프라인)
+
+### 아침 뉴스 파이프라인
+
+```python
+from orchestrators.daily_news_pipeline import DailyNewsPipeline
+
+# 파이프라인 생성
+pipeline = DailyNewsPipeline()
+
+# 실행 (뉴스 수집 → 분석 → 요약)
+result = pipeline.run("부동산", display=10)
+
+# 텔레그램 발송 포함
+result = pipeline.run("부동산", display=10, send_telegram=True)
+```
+
+### 시장 분석 파이프라인 (병렬)
+
+```python
+from orchestrators.market_analysis_pipeline import MarketAnalysisPipeline
+
+# 여러 카테고리 동시 분석
+pipeline = MarketAnalysisPipeline(["부동산", "주식", "금리"])
+
+# 병렬 수집 및 분석
+result = pipeline.run(display=5)
+
+# 결과 확인
+for focus_area, insights in result["focus_results"].items():
+    print(f"{focus_area}: {insights}")
+```
+
 ## 📋 새 에이전트 만들 때
 
-### 1. PRD 작성
-`AGENT_TEMPLATE.md`를 참고해서 기능 명세를 작성하세요.
+### 1. 템플릿 선택
+- **v2 에이전트**: `AGENT_TEMPLATE_V2.md` 사용 (BaseAgent 상속, 권장)
+- **v1 에이전트**: `AGENT_TEMPLATE.md` 사용 (기존 방식)
+
+### 2. PRD 작성
+선택한 템플릿을 참고해서 기능 명세를 작성하세요.
 
 ### 2. 단일 책임 확인
 - 에이전트가 **하나의 일**만 하도록 설계
 - 다른 기능이 필요하면 새 에이전트로 분리
 
-### 3. 인터페이스 명시
+### 3. 인터페이스 구현
+**v2 (BaseAgent 상속):**
+```python
+from base_agent import BaseAgent
+
+class MyAgent(BaseAgent):
+    def process(self, data: dict) -> dict:
+        """표준 인터페이스"""
+        return {"result": ...}
+```
+
+**v1 (기존 방식):**
 ```python
 class MyAgent:
     def process(self, input_data: dict) -> dict:
@@ -193,19 +349,26 @@ class MyAgent:
 ```
 ~/.claude/
 ├── agents/                           # 재사용 가능한 에이전트
+│   ├── base_agent.py                 # 🆕 표준 인터페이스
+│   ├── pipeline_agent.py             # 🆕 오케스트레이션
 │   ├── telegram_sender.py            # 텔레그램 발송
 │   ├── summarizer.py                  # 요약
 │   ├── news_scraper.py                # 뉴스 스크래핑 ✅
 │   ├── obsidian_writer.py             # 옵시디언 작성 ✅
-│   ├── news_analyzer.py               # 뉴스 분석 ✅
-│   ├── AGENT_TEMPLATE.md              # PRD 템플릿
+│   ├── news_analyzer.py               # 뉴스 분석 (v1)
+│   ├── news_analyzer_v2.py            # 🆕 뉴스 분석 (v2)
+│   ├── examples.py                    # 🆕 사용 예시
+│   ├── AGENT_TEMPLATE.md              # PRD 템플릿 (v1)
+│   ├── AGENT_TEMPLATE_V2.md           # 🆕 PRD 템플릿 (v2)
 │   └── README.md                       # 이 파일
 │
-├── orchestrators/                    # 에이전트 조립
-│   ├── morning_news.py                # 뉴스 + 요약 + 발송
-│   └── evening_briefing.py            # 저녁 브리핑
+├── orchestrators/                    # 실전 파이프라인
+│   ├── daily_news_pipeline.py        # 🆕 아침 뉴스 파이프라인
+│   └── market_analysis_pipeline.py   # 🆕 시장 분석 파이프라인
 │
 └── tests/                           # 단위 테스트
+    ├── test_base_agent.py            # 🆕 BaseAgent 테스트
+    ├── test_pipeline_agent.py        # 🆕 PipelineAgent 테스트
     ├── test_telegram_sender.py       # 텔레그램 테스트
     ├── test_summarizer.py             # 요약 테스트
     ├── test_news_scraper.py           # 뉴스 스크래핑 테스트 ✅
