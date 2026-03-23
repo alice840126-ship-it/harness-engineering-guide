@@ -1,61 +1,110 @@
 #!/usr/bin/env python3
-"""아침 뉴스 - 매일 07:00 네이버 API로 뉴스 수집 후 텔레그램 전송"""
+"""아침 뉴스 - 매일 07:00 RSS 4섹션 + 미국증시 + 자비스 통찰 텔레그램 전송"""
 import sys
+sys.path.insert(0, "/Users/oungsooryu/.claude/scripts")
 sys.path.insert(0, "/Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents")
-from config import BOT_TOKEN, CHAT_ID, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, BRAVE_API_KEY, VAULT_PATH, AGENTS_PATH
+from config import BOT_TOKEN, CHAT_ID
 
 import requests
+import feedparser
 from datetime import datetime
 from telegram_sender import TelegramSender
 
-CATEGORIES = [
-    ("부동산", "지식산업센터 부동산"),
-    ("경제", "경제 금리 주식"),
-    ("AI기술", "AI 인공지능 기술"),
+RSS_FEEDS = {
+    "부동산":    "https://www.yna.co.kr/rss/eco0401.xml",
+    "금융/기업": "https://www.yna.co.kr/rss/eco0501.xml",
+    "산업/건설": "https://www.ytn.co.kr/rss/science.xml",
+    "주거/트렌드": "https://www.yna.co.kr/rss/eco0601.xml",
+}
+
+SECTIONS = [
+    ("🏘 부동산",    "부동산"),
+    ("💰 금융/기업", "금융/기업"),
+    ("🏭 산업/건설", "산업/건설"),
+    ("🏡 주거/트렌드", "주거/트렌드"),
 ]
 
-def fetch_naver_news(query: str, display: int = 5) -> list:
-    url = "https://openapi.naver.com/v1/search/news.json"
-    headers = {
-        "X-Naver-Client-Id": NAVER_CLIENT_ID,
-        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-    }
-    params = {"query": query, "display": display, "sort": "date"}
+INSIGHTS = [
+    "지식산업센터 수요는 중소기업 성장과 직결됩니다. 공급 과잉 지역보다 수요 집중 지역을 선별하는 안목이 승패를 가릅니다.",
+    "금리 흐름이 곧 부동산 흐름입니다. 오늘의 뉴스가 내일의 가격에 반영된다는 걸 잊지 마세요.",
+    "AI가 산업을 재편하는 속도가 빨라지고 있습니다. 기술 트렌드를 부동산 입지와 연결해서 보는 시각이 필요합니다.",
+    "공급과 수요의 사이클을 파악하면 시장의 방향이 보입니다. 오늘도 데이터로 판단하세요.",
+    "전통적인 오피스 수요가 지식산업센터로 이동하는 흐름이 가속화되고 있습니다. 선점이 핵심입니다.",
+    "부동산 규제 완화는 시장 회복의 신호탄이 될 수 있습니다. 정책 방향을 면밀히 모니터링하세요.",
+    "기업의 이익이 늘면 결국 부동산 수요로 이어집니다. 오늘 기업 뉴스가 내일의 시장입니다.",
+    "정보의 속도가 수익의 속도입니다. 오늘 뉴스를 먼저 읽는 사람이 시장을 먼저 읽습니다.",
+    "거시경제 흐름과 미시적 물건 분석, 두 가지 시각을 모두 갖춰야 진짜 전문가입니다.",
+    "중소기업 경기가 살아나면 지식산업센터 임대 수요가 먼저 반응합니다. 선행 지표를 주목하세요.",
+    "글로벌 AI 투자 확대는 데이터센터와 첨단 산업단지 수요 증가로 이어집니다. 수혜 지역을 선별하세요.",
+    "금리 인하 기대와 인플레이션 우려가 공존하는 시장, 현금 흐름이 탄탄한 자산이 답입니다.",
+    "반도체·배터리·AI 클러스터 인근 지식산업센터는 장기 수요가 보장됩니다. 입지가 곧 미래입니다.",
+    "부동산 시장은 결국 사람이 모이는 곳을 따라갑니다. 일자리와 인프라가 집중되는 지역을 주목하세요.",
+    "공인중개사 시험도 부동산 시장 흐름을 이해하는 실전 지식이 기반입니다. 공부가 곧 실력입니다.",
+    "좋은 물건은 항상 먼저 사라집니다. 정보를 빨리 얻는 것이 좋은 딜을 만드는 첫걸음입니다.",
+    "시장이 어려울 때 공부하는 사람이 회복기에 가장 큰 수익을 냅니다.",
+]
+
+
+def fetch_rss(feed_url: str, max_items: int = 5) -> list:
     try:
-        res = requests.get(url, headers=headers, params=params, timeout=10)
-        res.raise_for_status()
-        return res.json().get("items", [])
+        feed = feedparser.parse(feed_url)
+        return [entry.get("title", "").strip() for entry in feed.entries[:max_items] if entry.get("title")]
     except Exception as e:
-        print(f"뉴스 오류 ({query}): {e}")
+        print(f"RSS 오류 ({feed_url}): {e}")
         return []
+
+
+def fetch_us_market() -> str:
+    indices = [("S&P 500", "^spx"), ("NASDAQ", "^ndq"), ("DOW JONES", "^dji")]
+    results = []
+    for name, symbol in indices:
+        try:
+            url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcvn&h&e=csv"
+            res = requests.get(url, timeout=10)
+            rows = res.text.strip().split("\n")
+            if len(rows) >= 2:
+                cols = rows[1].split(",")
+                open_p, close_p = float(cols[3]), float(cols[6])
+                chg = ((close_p - open_p) / open_p) * 100
+                arrow = "▲" if chg >= 0 else "▼"
+                results.append(f"{arrow} {name}: {close_p:,.2f} ({chg:+.2f}%)")
+        except Exception:
+            results.append(f"• {name}: 조회 불가")
+    return "\n".join(results) if results else "미국증시 데이터 없음"
+
 
 def main():
     now = datetime.now()
     sender = TelegramSender(bot_token=BOT_TOKEN, chat_id=CHAT_ID)
 
-    lines = [f"☀️ *{now.strftime('%m월 %d일')} 아침 뉴스*\n"]
+    today_str = now.strftime("%Y-%m-%d")
+    lines = [f"⚛️ 경자방 아침 뉴스 리포트 ({today_str})\n"]
 
-    for label, query in CATEGORIES:
-        items = fetch_naver_news(query, 5)
-        if not items:
-            continue
-        lines.append(f"\n📌 *{label}*")
-        for i, item in enumerate(items, 1):
-            title = item.get("title", "").replace("<b>", "").replace("</b>", "")
-            desc = item.get("description", "").replace("<b>", "").replace("</b>", "")
-            lines.append(f"{i}. {title}")
-            if desc:
-                lines.append(f"   _{desc[:80]}_")
+    for label, feed_key in SECTIONS:
+        titles = fetch_rss(RSS_FEEDS[feed_key])
+        lines.append(f"\n{label}")
+        if titles:
+            for i, title in enumerate(titles, 1):
+                lines.append(f"{i}. {title}")
+        else:
+            lines.append("뉴스 수집 실패")
 
-    lines.append("\n⚛️ 자비스")
+    lines.append(f"\n💰 전날 미국증시")
+    lines.append(fetch_us_market())
+
+    insight = INSIGHTS[now.timetuple().tm_yday % len(INSIGHTS)]
+    lines.append(f'\n💡 자비스의 한 줄 통찰')
+    lines.append(f'"{insight}"')
+
+    lines.append(f"\n오늘도 형님의 승리하는 하루를 응원합니다! ⚛️")
+
     message = "\n".join(lines)
+    if len(message) > 4096:
+        message = message[:4090] + "\n..."
 
-    # 4096자 제한 처리
-    if len(message) > 4000:
-        message = message[:4000] + "\n..."
-
-    success = sender.send_markdown(message)
+    success = sender.send_message(message)
     print(f"아침 뉴스 전송: {'성공' if success else '실패'}")
+
 
 if __name__ == "__main__":
     main()

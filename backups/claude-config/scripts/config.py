@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """공통 설정 로더 - 모든 스크립트에서 import해서 사용"""
 import os
+import warnings
+warnings.filterwarnings("ignore")
 from pathlib import Path
 from dotenv import load_dotenv
 
