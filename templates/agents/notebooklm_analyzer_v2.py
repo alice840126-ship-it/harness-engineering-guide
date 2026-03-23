@@ -2,42 +2,35 @@
 """
 NotebookLM 분석 에이전트 v2 (BaseAgent 기반)
 
-NotebookLM CLI를 활용한 뉴스/문서 분석
-- 단일 책임: NotebookLM 분석만 담당
-- BaseAgent 상속으로 표준 인터페이스
+notebooklm-py Python SDK를 활용한 노트북 질문/분석
+- "ask": 기존 노트북에 직접 질문
+- "analyze": 텍스트 소스 업로드 후 질문
 """
 
-import json
-import subprocess
-from typing import List, Dict, Optional, Any
+import asyncio
+import re
+from typing import Dict, Optional, Any
 from base_agent import BaseAgent
 
 
+def _remove_citations(text: str) -> str:
+    """[1], [1,2], [3-5] 등 인용 표시 제거"""
+    return re.sub(r"\s*\[[\d,\s\-]+\]", "", text)
+
+
 class NotebookLMAnalyzer(BaseAgent):
-    """NotebookLM 분석 에이전트 v2"""
+    """NotebookLM 분석 에이전트 v2 (Python SDK 기반)"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """
-        초기화
-
-        Args:
-            config: 에이전트 설정 (notebooklm_path, timeout)
-        """
         super().__init__("notebooklm_analyzer", config)
 
-        self.notebooklm_path = self.config.get("notebooklm_path", "notebooklm")
-        self.timeout = self.config.get("timeout", 600)
-
     def validate_input(self, data: Dict[str, Any]) -> bool:
-        """입력 검증"""
-        operation = data.get("operation", "analyze")
-
-        if operation == "analyze":
-            return "prompt" in data
-        elif operation == "news_trends":
-            return "news_items" in data
-        else:
-            return False
+        operation = data.get("operation", "ask")
+        if operation == "ask":
+            return "notebook_id" in data and "prompt" in data
+        elif operation == "analyze":
+            return "notebook_id" in data and "news_text" in data and "prompt" in data
+        return False
 
     def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -45,124 +38,103 @@ class NotebookLMAnalyzer(BaseAgent):
 
         Args:
             data: {
-                "operation": str,           # "analyze", "news_trends"
-                "prompt": str,              # analyze용 프롬프트
-                "news_items": list,         # news_trends용 뉴스
-                "json_output": bool,        # JSON 출력 여부 (선택)
-                "framework": str            # 프레임워크 (선택)
+                "operation": str,          # "ask" | "analyze"
+
+                # ask (기존 노트북에 직접 질문):
+                "notebook_id": str,        # 노트북 ID
+                "prompt": str,             # 질문
+                "ask_timeout": int,        # 응답 대기 초 (기본 180)
+
+                # analyze (소스 업로드 후 질문):
+                "notebook_id": str,
+                "news_text": str,          # 업로드할 텍스트 내용
+                "prompt": str,
+                "source_title": str,       # 소스 제목 (기본 "뉴스 모음")
+                "clear_sources": bool,     # 기존 소스 삭제 여부 (기본 True)
+                "source_timeout": int,     # 소스 처리 대기 초 (기본 120)
+                "ask_timeout": int,        # 분석 대기 초 (기본 300)
             }
 
         Returns:
-            {"result": any, "operation": str}
+            {"result": str, "operation": str, "success": bool}
         """
-        operation = data.get("operation", "analyze")
+        operation = data.get("operation", "ask")
+        if operation == "ask":
+            return asyncio.run(self._ask(data))
+        elif operation == "analyze":
+            return asyncio.run(self._analyze_with_source(data))
+        return {"error": "잘못된 operation (ask 또는 analyze)", "success": False}
 
-        if operation == "analyze":
-            return self._analyze_with_prompt(data)
-        elif operation == "news_trends":
-            return self._analyze_news_trends(data)
-        else:
-            return {"error": "잘못된 operation"}
-
-    def _analyze_with_prompt(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """프롬프트 기반 분석"""
+    async def _ask(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """기존 노트북에 직접 질문"""
+        notebook_id = data["notebook_id"]
         prompt = data["prompt"]
-        json_output = data.get("json_output", True)
-
+        timeout = data.get("ask_timeout", 180)
         try:
-            cmd = [self.notebooklm_path, "ask", prompt]
-
-            if json_output:
-                cmd.append("--json")
-
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout
-            )
-
-            if result.returncode == 0:
-                if json_output:
-                    try:
-                        return {
-                            "result": json.loads(result.stdout),
-                            "operation": "analyze",
-                            "success": True
-                        }
-                    except json.JSONDecodeError:
-                        return {
-                            "result": result.stdout,
-                            "operation": "analyze",
-                            "success": True
-                        }
-                else:
-                    return {
-                        "result": result.stdout,
-                        "operation": "analyze",
-                        "success": True
-                    }
-            else:
+            from notebooklm import NotebookLMClient
+            async with await NotebookLMClient.from_storage() as client:
+                result = await asyncio.wait_for(
+                    client.chat.ask(notebook_id, prompt),
+                    timeout=timeout
+                )
+                answer = result.answer if hasattr(result, "answer") else str(result)
                 return {
-                    "error": result.stderr,
-                    "operation": "analyze",
-                    "success": False
+                    "result": _remove_citations(answer),
+                    "operation": "ask",
+                    "success": True
                 }
+        except asyncio.TimeoutError:
+            return {"error": f"응답 시간 초과 ({timeout}초)", "operation": "ask", "success": False}
+        except Exception as e:
+            return {"error": str(e), "operation": "ask", "success": False}
 
-        except subprocess.TimeoutExpired:
-            return {"error": "시간 초과", "operation": "analyze", "success": False}
-        except FileNotFoundError:
-            return {"error": "NotebookLM CLI 없음", "operation": "analyze", "success": False}
+    async def _analyze_with_source(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """텍스트 소스 업로드 후 질문"""
+        notebook_id = data["notebook_id"]
+        news_text = data["news_text"]
+        prompt = data["prompt"]
+        source_title = data.get("source_title", "뉴스 모음")
+        clear_sources = data.get("clear_sources", True)
+        source_timeout = data.get("source_timeout", 120)
+        ask_timeout = data.get("ask_timeout", 300)
+        try:
+            from notebooklm import NotebookLMClient
+            async with await NotebookLMClient.from_storage() as client:
+                if clear_sources:
+                    try:
+                        existing = await client.sources.list(notebook_id)
+                        for src in existing:
+                            await client.sources.delete(notebook_id, src.id)
+                        print(f"  기존 소스 {len(existing)}개 삭제")
+                    except Exception as e:
+                        print(f"  소스 삭제 (무시): {e}")
+
+                source = await client.sources.add_text(notebook_id, source_title, news_text)
+                print("  텍스트 소스 1개 추가 완료")
+
+                try:
+                    await asyncio.wait_for(
+                        client.sources.wait_for_sources(notebook_id, [source.id]),
+                        timeout=source_timeout
+                    )
+                    print("  소스 처리 완료")
+                except asyncio.TimeoutError:
+                    print("  소스 처리 타임아웃 (계속 진행)")
+                except Exception:
+                    await asyncio.sleep(10)
+
+                print("  분석 요청 중... (최대 5분)")
+                result = await asyncio.wait_for(
+                    client.chat.ask(notebook_id, prompt),
+                    timeout=ask_timeout
+                )
+                answer = result.answer if hasattr(result, "answer") else str(result)
+                return {
+                    "result": _remove_citations(answer),
+                    "operation": "analyze",
+                    "success": True
+                }
+        except asyncio.TimeoutError:
+            return {"error": f"분석 시간 초과 ({ask_timeout}초)", "operation": "analyze", "success": False}
         except Exception as e:
             return {"error": str(e), "operation": "analyze", "success": False}
-
-    def _analyze_news_trends(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """뉴스 트렌드 분석"""
-        news_items = data["news_items"]
-        framework = data.get("framework", "deep_insight")
-
-        # 뉴스를 텍스트로 변환
-        news_text = self._news_items_to_text(news_items)
-
-        # 프레임워크별 프롬프트
-        prompts = {
-            "deep_insight": f"""다음 뉴스들을 분석해서 깊은 인사이트를 도출해주세요:
-
-{news_text}
-
-다음 형식으로 JSON 출력:
-{{
-    "themes": ["테마1", "테마2"],
-    "insights": ["인사이트1", "인사이트2"],
-    "recommendations": ["추천1", "추천2"]
-}}""",
-            "quick_summary": f"""다음 뉴스들을 3문장으로 요약해주세요:
-
-{news_text}"""
-        }
-
-        prompt = prompts.get(framework, prompts["deep_insight"])
-
-        return self._analyze_with_prompt({
-            "prompt": prompt,
-            "json_output": True,
-            "operation": "analyze"
-        })
-
-    def _news_items_to_text(self, news_items: List[Dict[str, str]]) -> str:
-        """뉴스 아이템을 텍스트로 변환"""
-        lines = []
-        for item in news_items:
-            title = item.get("title", "")
-            url = item.get("url", "")
-            description = item.get("description", "")
-
-            line = f"- {title}"
-            if description:
-                line += f": {description}"
-            if url:
-                line += f" ({url})"
-
-            lines.append(line)
-
-        return "\n".join(lines)
