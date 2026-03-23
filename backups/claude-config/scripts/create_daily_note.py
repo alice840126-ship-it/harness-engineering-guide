@@ -2,11 +2,13 @@
 """데일리 노트 생성 - 매일 07:00 옵시디언 월별 폴더에 생성 + 오늘 일정 주입"""
 import sys
 sys.path.insert(0, "/Users/oungsooryu/.claude/scripts")
+sys.path.insert(0, "/Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents")
 from config import VAULT_PATH
 
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from obsidian_writer_v2 import ObsidianWriter
 
 
 def get_today_schedule() -> str:
@@ -35,12 +37,10 @@ def create_daily_note():
     weekday = weekdays[now.weekday()]
 
     month_folder = f"{month:02d}월"
-    folder_path = Path(VAULT_PATH) / "00. In box" / str(year) / month_folder
-    folder_path.mkdir(parents=True, exist_ok=True)
-
     filename = f"{year}-{month:02d}-{day:02d}.md"
-    note_path = folder_path / filename
 
+    # 중복 생성 방지
+    note_path = Path(VAULT_PATH) / "00. In box" / str(year) / month_folder / filename
     if note_path.exists():
         print(f"이미 존재: {note_path}")
         return
@@ -73,8 +73,14 @@ tags: [daily-note, {year}년]
 *자동 생성: {now.strftime("%Y-%m-%d %H:%M")}*
 """
 
-    note_path.write_text(content, encoding="utf-8")
-    print(f"✅ 데일리 노트 생성: {note_path}")
+    writer = ObsidianWriter(config={"vault_path": VAULT_PATH})
+    result = writer.run({
+        "operation": "write",
+        "folder": f"00. In box/{year}/{month_folder}",
+        "filename": filename,
+        "content": content,
+    })
+    print(f"✅ 데일리 노트 생성: {result.get('path', '알 수 없음')}")
 
 
 if __name__ == "__main__":

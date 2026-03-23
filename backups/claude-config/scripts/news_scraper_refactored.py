@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""주간/월간 뉴스 수집 → NotebookLM URL 추가 → 3층 분석 자동 생성 → 옵시디언 저장
+"""주간/월간 뉴스 수집 → NotebookLM 3층 분석 → 옵시디언 저장
 - 주간: 일요일 09:00
 - 월간: 1일 09:00
 """
@@ -8,13 +8,15 @@ sys.path.insert(0, "/Users/oungsooryu/.claude/scripts")
 sys.path.insert(0, "/Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents")
 from config import BOT_TOKEN, CHAT_ID, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, VAULT_PATH
 
-import asyncio
 import re
-import requests
 from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 from telegram_sender import TelegramSender
+from news_scraper_v2 import NewsScraper
+from news_analyzer_v2 import NewsAnalyzer
+from obsidian_writer_v2 import ObsidianWriter
+from notebooklm_analyzer_v2 import NotebookLMAnalyzer
 
 WEEKLY_NB_ID  = "25b3c51b-841a-42c4-91df-34f506e0eb29"
 MONTHLY_NB_ID = "e5effd07-1d26-448c-aec7-e63410182c4f"
@@ -120,33 +122,6 @@ def clean(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
-def fetch_naver_news(query: str, display: int = 10) -> list:
-    url = "https://openapi.naver.com/v1/search/news.json"
-    headers = {
-        "X-Naver-Client-Id": NAVER_CLIENT_ID,
-        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-    }
-    try:
-        res = requests.get(url, headers=headers,
-                           params={"query": query, "display": display, "sort": "date"},
-                           timeout=10)
-        res.raise_for_status()
-        return res.json().get("items", [])
-    except Exception as e:
-        print(f"뉴스 오류 ({query}): {e}")
-        return []
-
-
-def extract_top_keywords(all_items: list, top_n: int = 5) -> list:
-    counter = Counter()
-    for item in all_items:
-        title = clean(item.get("title", ""))
-        for kw in KEYWORD_LIST:
-            if kw in title:
-                counter[kw] += 1
-    return [kw for kw, _ in counter.most_common(top_n)]
-
-
 def determine_period() -> str:
     now = datetime.now()
     return "monthly" if now.day == 1 else "weekly"
@@ -158,68 +133,74 @@ def get_week_range(now: datetime) -> tuple:
     return week_start, week_end
 
 
-def build_news_text(all_news: dict) -> str:
-    """뉴스 전체를 하나의 텍스트로 묶기 (제목 + URL)"""
+def build_news_text(articles: list) -> str:
+    """뉴스 목록을 하나의 텍스트로 (제목 + URL)"""
     lines = []
-    n = 1
-    for label, items in all_news.items():
-        lines.append(f"=== {label} ===")
-        for item in items:
-            title = clean(item.get("title", ""))
-            link = item.get("originallink") or item.get("link", "")
-            lines.append(f"[{n}] {title}")
-            lines.append(f"    URL: {link}")
-            n += 1
-        lines.append("")
+    for n, item in enumerate(articles, 1):
+        title = item.get("title", "")
+        link = item.get("link", "")
+        lines.append(f"[{n}] {title}")
+        lines.append(f"    URL: {link}")
     return "\n".join(lines)
 
 
-async def full_pipeline(nb_id: str, news_text: str, prompt: str) -> str:
-    """뉴스 텍스트를 소스 1개로 올리고 분석 요청"""
-    from notebooklm import NotebookLMClient
-    async with await NotebookLMClient.from_storage() as client:
-        # 기존 소스 삭제
-        try:
-            existing = await client.sources.list(nb_id)
-            for src in existing:
-                await client.sources.delete(nb_id, src.id)
-            print(f"  기존 소스 {len(existing)}개 삭제")
-        except Exception as e:
-            print(f"  소스 삭제 (무시): {e}")
+def build_monthly_news_text(now: datetime) -> tuple:
+    """지난달 데일리 뉴스 MD 파일들에서 제목+URL 추출해 하나의 텍스트로 묶기"""
+    last_month = now.replace(day=1) - timedelta(days=1)
+    year, month = last_month.year, last_month.month
 
-        # 뉴스 전체를 텍스트 소스 1개로 추가
-        source = await client.sources.add_text(nb_id, "이번 주 뉴스 모음", news_text)
-        print("  텍스트 소스 1개 추가 완료")
-
-        # 소스 처리 대기
-        try:
-            await asyncio.wait_for(
-                client.sources.wait_for_sources(nb_id, [source.id]),
-                timeout=120
-            )
-            print("  소스 처리 완료")
-        except asyncio.TimeoutError:
-            print("  소스 처리 타임아웃 (계속 진행)")
-        except Exception:
-            await asyncio.sleep(10)  # fallback 대기
-
-        # 분석 요청
-        print("  분석 요청 중... (최대 5분)")
-        result = await asyncio.wait_for(
-            client.chat.ask(nb_id, prompt),
-            timeout=300
-        )
-        return getattr(result, 'text', '') or str(result)
-
-
-def save_to_obsidian(period: str, analysis: str, now: datetime,
-                     top_keywords: list, total_news: int) -> str:
     vault = Path(VAULT_PATH)
+    daily_folder = vault / "50. 투자" / "01. 뉴스 스크랩" / str(year) / f"{month:02d}"
+
+    if not daily_folder.exists():
+        print(f"  데일리 폴더 없음: {daily_folder}")
+        return "", [], 0
+
+    md_files = sorted(daily_folder.glob("*.md"))
+    if not md_files:
+        print(f"  데일리 MD 파일 없음: {daily_folder}")
+        return "", [], 0
+
+    lines = [f"=== {year}년 {month:02d}월 전체 뉴스 모음 ({len(md_files)}일치) ===\n"]
+    all_titles = []
+    n = 1
+
+    for md_file in md_files:
+        date_str = md_file.stem
+        lines.append(f"--- {date_str} ---")
+        content = md_file.read_text(encoding="utf-8")
+        title_matches = re.findall(r"^### \d+\.\s+(.+?)\s*⭐", content, re.MULTILINE)
+        url_matches = re.findall(r"-\s+\*\*URL:\*\*\s+(\S+)", content)
+        for i, title in enumerate(title_matches):
+            url = url_matches[i] if i < len(url_matches) else ""
+            title_clean = clean(title)
+            lines.append(f"[{n}] {title_clean}")
+            if url:
+                lines.append(f"    URL: {url}")
+            all_titles.append(title_clean)
+            n += 1
+        lines.append("")
+
+    total = n - 1
+    print(f"  {year}년 {month:02d}월 데일리 {len(md_files)}일치, 총 {total}건 추출")
+
+    counter = Counter()
+    for title in all_titles:
+        for kw in KEYWORD_LIST:
+            if kw in title:
+                counter[kw] += 1
+    top_keywords = [kw for kw, _ in counter.most_common(5)]
+    return "\n".join(lines), top_keywords, total
+
+
+def build_obsidian_content(period: str, analysis: str, now: datetime,
+                           top_keywords: list, total: int) -> tuple:
+    """옵시디언 저장용 (folder, filename, content) 반환"""
     week_start, week_end = get_week_range(now)
     kw_str = ", ".join(top_keywords) if top_keywords else "—"
 
     if period == "monthly":
-        folder = vault / "50. 투자" / "02. 테제 분석" / "Monthly" / str(now.year)
+        folder = f"50. 투자/02. 테제 분석/Monthly/{now.year}"
         filename = f"{now.strftime('%Y-%m-%d')}_월간분석_구조적변화.md"
         header = (
             f"# {now.strftime('%Y년 %m월')} 월간 분석: 구조적 변화의 흐름\n\n"
@@ -229,18 +210,16 @@ def save_to_obsidian(period: str, analysis: str, now: datetime,
             f"## 🎯 깊은 통찰: 표면 뒤에 숨겨진 진짜 이야기\n"
             f"> **분석 프레임워크:** 표면적 사건 → 진짜 타겟 → 숨겨진 의도\n\n"
             f"---\n\n"
-            f"## 📊 이달 주요 키워드\n\n**{kw_str}** (총 {total_news}건 기반)\n\n---\n\n"
+            f"## 📊 이달 주요 키워드\n\n**{kw_str}** (총 {total}건 기반)\n\n---\n\n"
         )
         footer = (
             f"\n\n---\n\n"
             f"**분석일:** {now.strftime('%Y년 %m월 %d일')}\n"
             f"**기반:** NotebookLM 월간 깊은 통찰 분석 (지난 30일)\n"
-            f"**목적:** 투자를 넘어선 사회적 흐름에 대한 통찰\n\n"
-            f"---\n\n"
-            f'*"지난 한 달의 변화가 내년의 운명을 결정한다."*\n'
+            f"**목적:** 투자를 넘어선 사회적 흐름에 대한 통찰\n"
         )
     else:
-        folder = vault / "50. 투자" / "02. 테제 분석" / "Weekly" / str(now.year)
+        folder = f"50. 투자/02. 테제 분석/Weekly/{now.year}"
         ws = week_start.strftime('%Y-%m-%d')
         we = week_end.strftime('%m-%d')
         filename = f"{ws}_{we}_주간분석_구조적변화.md"
@@ -253,22 +232,16 @@ def save_to_obsidian(period: str, analysis: str, now: datetime,
             f"## 🎯 깊은 통찰: 표면 뒤에 숨겨진 진짜 이야기\n"
             f"> **분석 프레임워크:** 표면적 사건 → 진짜 타겟 → 숨겨진 의도\n\n"
             f"---\n\n"
-            f"## 📊 이번 주 주요 키워드\n\n**{kw_str}** (총 {total_news}건 기반)\n\n---\n\n"
+            f"## 📊 이번 주 주요 키워드\n\n**{kw_str}** (총 {total}건 기반)\n\n---\n\n"
         )
         footer = (
             f"\n\n---\n\n"
             f"**분석일:** {now.strftime('%Y년 %m월 %d일')}\n"
             f"**기반:** NotebookLM 깊은 통찰 분석\n"
-            f"**목적:** 투자를 넘어선 사회적 흐름에 대한 통찰\n\n"
-            f"---\n\n"
-            f'*"미국이 이란을 쳤는데, 진짜 맞은 건 러시아다." — 이런 통찰이야말로 진짜 분석이다.*\n'
+            f"**목적:** 투자를 넘어선 사회적 흐름에 대한 통찰\n"
         )
 
-    folder.mkdir(parents=True, exist_ok=True)
-    note_path = folder / filename
-    note_path.write_text(header + analysis + footer, encoding="utf-8")
-    print(f"✅ 저장: {note_path}")
-    return str(note_path)
+    return folder, filename, header + analysis + footer
 
 
 def main():
@@ -279,21 +252,48 @@ def main():
     prompt = MONTHLY_PROMPT if period == "monthly" else WEEKLY_PROMPT
     sender = TelegramSender(bot_token=BOT_TOKEN, chat_id=CHAT_ID)
 
-    print(f"📰 {period_label} 뉴스 수집 중...")
-    all_news = {}
-    all_items = []
-    for label, query in QUERIES:
-        items = fetch_naver_news(query, 10)
-        if items:
-            all_news[label] = items
-            all_items.extend(items)
+    if period == "monthly":
+        print("📰 지난달 데일리 뉴스 수집 중...")
+        news_text, top_keywords, total = build_monthly_news_text(now)
+        if not news_text:
+            print("❌ 데일리 뉴스 파일 없음 - 종료")
+            return
+    else:
+        print("📰 주간 뉴스 수집 중...")
+        scraper = NewsScraper(config={
+            "naver_client_id": NAVER_CLIENT_ID,
+            "naver_client_secret": NAVER_CLIENT_SECRET
+        })
+        result = scraper.run({
+            "operation": "multiple",
+            "queries": [q for _, q in QUERIES],
+            "display_per_query": 10,
+            "remove_duplicates": True
+        })
+        articles = result.get("articles", [])
+        total = len(articles)
 
-    top_keywords = extract_top_keywords(all_items, 5)
-    total = len(all_items)
+        analyzer = NewsAnalyzer(config={"keywords": {"전체": KEYWORD_LIST}})
+        kw_result = analyzer.run({
+            "articles": [{"title": a.get("title", ""), "content": a.get("description", "")} for a in articles],
+            "operation": "keywords"
+        })
+        kw_pairs = kw_result.get("keywords", [])
+        if kw_pairs and isinstance(kw_pairs[0], (list, tuple)):
+            seen, top_keywords = set(), []
+            for _, kw in kw_pairs:
+                if kw not in seen:
+                    seen.add(kw)
+                    top_keywords.append(kw)
+                if len(top_keywords) == 5:
+                    break
+        else:
+            top_keywords = list(dict.fromkeys(kw_pairs))[:5]
+
+        news_text = build_news_text(articles)
+
     print(f"수집 완료: {total}건")
     print(f"주요 키워드: {', '.join(top_keywords)}")
-
-    news_text = build_news_text(all_news)
 
     sender.send_message(
         f"⏳ {period_label} 테제 분석 시작\n"
@@ -301,18 +301,33 @@ def main():
         f"완료까지 약 3~5분 소요됩니다 ⚛️"
     )
 
-    print(f"\nNotebookLM 파이프라인 실행 중...")
-    try:
-        analysis = asyncio.run(full_pipeline(nb_id, news_text, prompt))
+    print("\nNotebookLM 파이프라인 실행 중...")
+    nb_analyzer = NotebookLMAnalyzer()
+    nb_result = nb_analyzer.run({
+        "operation": "analyze",
+        "notebook_id": nb_id,
+        "news_text": news_text,
+        "source_title": f"{period_label} 뉴스 모음",
+        "prompt": prompt
+    })
+
+    if nb_result.get("success"):
+        analysis = nb_result["result"]
         print(f"분석 완료 ({len(analysis)}자)")
-    except asyncio.TimeoutError:
-        analysis = "❌ NotebookLM 분석 타임아웃 (300초 초과)"
-        print(analysis)
-    except Exception as e:
-        analysis = f"❌ 분석 오류: {e}"
+    else:
+        analysis = f"❌ 분석 오류: {nb_result.get('error', '알 수 없음')}"
         print(analysis)
 
-    note_path = save_to_obsidian(period, analysis, now, top_keywords, total)
+    folder, filename, content = build_obsidian_content(period, analysis, now, top_keywords, total)
+    writer = ObsidianWriter(config={"vault_path": VAULT_PATH})
+    write_result = writer.run({
+        "operation": "write",
+        "folder": folder,
+        "filename": filename,
+        "content": content
+    })
+    note_path = write_result.get("path", "")
+    print(f"✅ 저장: {note_path}")
 
     kw_str = ", ".join(top_keywords)
     sender.send_message(

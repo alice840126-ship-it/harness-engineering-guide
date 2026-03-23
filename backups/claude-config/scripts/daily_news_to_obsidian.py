@@ -2,13 +2,15 @@
 """데일리 뉴스 → 옵시디언 저장 - 매일 07:00 / 50. 투자/01. 뉴스 스크랩"""
 import sys
 sys.path.insert(0, "/Users/oungsooryu/.claude/scripts")
+sys.path.insert(0, "/Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents")
 from config import NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, VAULT_PATH
 
 import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
-import requests
+from news_scraper_v2 import NewsScraper
+from obsidian_writer_v2 import ObsidianWriter
 
 QUERIES = [
     ("경제",      "경제 금리 환율 물가"),
@@ -18,30 +20,12 @@ QUERIES = [
     ("지정학",    "지정학 미국 중국 이란 무역 전쟁"),
 ]
 
-# 출처 신뢰도 (도메인 기반)
-TRUSTED_DOMAINS = ["naver.com", "yna.co.kr", "yonhap", "chosun.com", "joongang", "hani.co.kr",
-                   "hankyung.com", "mk.co.kr", "sedaily.com", "etnews.com"]
+TRUSTED_DOMAINS = ["naver.com", "yna.co.kr", "yonhap", "chosun.com", "joongang",
+                   "hani.co.kr", "hankyung.com", "mk.co.kr", "sedaily.com", "etnews.com"]
 
 
 def clean(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
-
-
-def fetch_naver_news(query: str, display: int = 5) -> list:
-    url = "https://openapi.naver.com/v1/search/news.json"
-    headers = {
-        "X-Naver-Client-Id": NAVER_CLIENT_ID,
-        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-    }
-    try:
-        res = requests.get(url, headers=headers,
-                           params={"query": query, "display": display, "sort": "date"},
-                           timeout=10)
-        res.raise_for_status()
-        return res.json().get("items", [])
-    except Exception as e:
-        print(f"뉴스 오류 ({query}): {e}")
-        return []
 
 
 def get_source(link: str) -> str:
@@ -77,7 +61,6 @@ def build_visualization(all_items: list) -> list:
     total = len(all_items)
     lines = ["## 📈 오늘의 시각화", ""]
 
-    # 출처 신뢰도
     lines.append("### 출처 신뢰도 분포")
     lines.append("")
     source_counter = Counter(get_source(item.get("link", "")) for item in all_items)
@@ -100,13 +83,11 @@ def build_insights(all_items: list, keyword_counter: Counter) -> list:
     lines = ["## 💡 인사이트 (자동 생성)", ""]
     top_kws = [kw for kw, _ in keyword_counter.most_common(3)]
 
-    # 출처 품질
     lines.append("### 출처 품질")
     lines.append("")
     naver_cnt = sum(1 for item in all_items if "naver.com" in item.get("link", ""))
     lines.append(f"- 네이버 수집: {naver_cnt}/{len(all_items)}건")
 
-    # 키워드 트렌드
     lines.append("### 키워드 트렌드")
     if top_kws:
         lines.append(f"- **주요 키워드:** {', '.join(top_kws)}")
@@ -121,20 +102,23 @@ def main():
     year, month, day = now.year, now.month, now.day
     date_str = f"{year}-{month:02d}-{day:02d}"
 
-    # 저장 경로: 50. 투자/01. 뉴스 스크랩/2026/03/
-    folder_path = Path(VAULT_PATH) / "50. 투자" / "01. 뉴스 스크랩" / str(year) / f"{month:02d}"
-    folder_path.mkdir(parents=True, exist_ok=True)
-    note_path = folder_path / f"{date_str}.md"
-
+    # 이미 존재하면 스킵 (ObsidianWriter 호출 전에 체크)
+    vault = Path(VAULT_PATH)
+    note_path = vault / "50. 투자" / "01. 뉴스 스크랩" / str(year) / f"{month:02d}" / f"{date_str}.md"
     if note_path.exists():
         print(f"이미 존재: {note_path}")
         return
 
-    # 뉴스 수집
+    # 뉴스 수집 (NewsScraper 에이전트)
+    scraper = NewsScraper(config={
+        "naver_client_id": NAVER_CLIENT_ID,
+        "naver_client_secret": NAVER_CLIENT_SECRET
+    })
     all_items = []
     section_data = {}
     for label, query in QUERIES:
-        items = fetch_naver_news(query, 4)
+        result = scraper.run({"operation": "scrape", "query": query, "display": 4, "filter_spam": True})
+        items = result.get("articles", [])
         section_data[label] = items
         all_items.extend(items)
 
@@ -163,17 +147,13 @@ def main():
         f"",
     ]
 
-    # 시각화 섹션
     lines.extend(build_visualization(all_items))
     lines.append("---")
     lines.append("")
-
-    # 인사이트 섹션
     lines.extend(build_insights(all_items, keyword_counter))
     lines.append("---")
     lines.append("")
 
-    # 뉴스 목록
     lines.append("## 📰 뉴스 목록")
     lines.append("")
     n = 1
@@ -189,7 +169,6 @@ def main():
             source = get_source(link)
             lines.append(f"### {n}. {title} ⭐")
             if desc:
-                # 핵심은 250자까지
                 lines.append(f"- **핵심:** {desc[:250]}")
             lines.append(f"- **URL:** {link}")
             lines.append(f"- **출처:** {source}")
@@ -200,8 +179,16 @@ def main():
     lines.append(f"## 🏷️ 오늘의 태그")
     lines.append(f"#{date_str.replace('-', '_')}")
 
-    note_path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"✅ 데일리 뉴스 저장: {note_path} ({total}건)")
+    # ObsidianWriter 에이전트로 저장
+    writer = ObsidianWriter(config={"vault_path": VAULT_PATH})
+    result = writer.run({
+        "operation": "write",
+        "folder": f"50. 투자/01. 뉴스 스크랩/{year}/{month:02d}",
+        "filename": f"{date_str}.md",
+        "content": "\n".join(lines)
+    })
+    saved_path = result.get("path", "")
+    print(f"✅ 데일리 뉴스 저장: {saved_path} ({total}건)")
 
 
 if __name__ == "__main__":

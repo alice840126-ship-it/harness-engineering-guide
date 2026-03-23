@@ -3,22 +3,30 @@
     "obsidian": {
       "type": "stdio",
       "command": "node",
-      "args": ["/Users/oungsooryu/mcp-servers/obsidian-mcp/dist/index.js"]
+      "args": [
+        "/Users/oungsooryu/mcp-servers/obsidian-mcp/dist/index.js"
+      ]
     },
     "telegram": {
       "type": "stdio",
       "command": "node",
-      "args": ["/Users/oungsooryu/mcp-servers/telegram-mcp/dist/index.js"]
+      "args": [
+        "/Users/oungsooryu/mcp-servers/telegram-mcp/dist/index.js"
+      ]
     },
     "web-search": {
       "type": "stdio",
       "command": "node",
-      "args": ["/Users/oungsooryu/mcp-servers/web-search-mcp/dist/index.js"]
+      "args": [
+        "/Users/oungsooryu/mcp-servers/web-search-mcp/dist/index.js"
+      ]
     },
     "google-calendar": {
       "type": "stdio",
       "command": "node",
-      "args": ["/Users/oungsooryu/mcp-servers/google-calendar-mcp/dist/index.js"]
+      "args": [
+        "/Users/oungsooryu/mcp-servers/google-calendar-mcp/dist/index.js"
+      ]
     }
   }
 }

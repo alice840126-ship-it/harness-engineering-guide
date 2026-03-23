@@ -10,6 +10,7 @@ import requests
 import feedparser
 from datetime import datetime
 from telegram_sender import TelegramSender
+from news_scraper_v2 import NewsScraper
 
 YNA_ECONOMY_RSS = "https://www.yna.co.kr/rss/economy.xml"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
@@ -75,13 +76,13 @@ def filter_by_keywords(all_titles: list, keywords: list, max_items: int = 5) -> 
 
 
 def fetch_naver_news(query: str, display: int = 5) -> list:
-    url = "https://openapi.naver.com/v1/search/news.json"
-    headers = {"X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET}
-    try:
-        res = requests.get(url, headers=headers, params={"query": query, "display": display, "sort": "date"}, timeout=10)
-        return [clean(item.get("title", "")) for item in res.json().get("items", [])]
-    except Exception:
-        return []
+    """Naver API 폴백 (하네스 에이전트 사용)"""
+    scraper = NewsScraper(config={
+        "naver_client_id": NAVER_CLIENT_ID,
+        "naver_client_secret": NAVER_CLIENT_SECRET,
+    })
+    result = scraper.run({"operation": "scrape", "query": query, "display": display})
+    return [item.get("title", "") for item in result.get("articles", [])]
 
 
 def get_section_news(section: str, all_rss: list) -> list:
