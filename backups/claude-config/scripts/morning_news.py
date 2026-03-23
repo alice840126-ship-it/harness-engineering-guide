@@ -1,28 +1,24 @@
 #!/usr/bin/env python3
-"""아침 뉴스 - 매일 07:00 RSS 4섹션 + 미국증시 + 자비스 통찰 텔레그램 전송"""
+"""아침 뉴스 - 매일 07:00 RSS+Naver 4섹션 + 미국증시 + 자비스 통찰 텔레그램 전송"""
 import sys
 sys.path.insert(0, "/Users/oungsooryu/.claude/scripts")
 sys.path.insert(0, "/Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents")
-from config import BOT_TOKEN, CHAT_ID
+from config import BOT_TOKEN, CHAT_ID, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET
 
+import re
 import requests
 import feedparser
 from datetime import datetime
 from telegram_sender import TelegramSender
 
-RSS_FEEDS = {
-    "부동산":    "https://www.yna.co.kr/rss/eco0401.xml",
-    "금융/기업": "https://www.yna.co.kr/rss/eco0501.xml",
-    "산업/건설": "https://www.ytn.co.kr/rss/science.xml",
-    "주거/트렌드": "https://www.yna.co.kr/rss/eco0601.xml",
-}
+YNA_ECONOMY_RSS = "https://www.yna.co.kr/rss/economy.xml"
 
-SECTIONS = [
-    ("🏘 부동산",    "부동산"),
-    ("💰 금융/기업", "금융/기업"),
-    ("🏭 산업/건설", "산업/건설"),
-    ("🏡 주거/트렌드", "주거/트렌드"),
-]
+SECTION_KEYWORDS = {
+    "부동산":    ["부동산", "아파트", "주택", "임대", "오피스텔", "지식산업센터", "분양", "전세", "매매", "청약"],
+    "금융/기업": ["금리", "증시", "주가", "코스피", "코스닥", "금융", "기업", "실적", "투자", "채권", "환율"],
+    "산업/건설": ["건설", "산업", "반도체", "AI", "인공지능", "기술", "배터리", "수출", "제조"],
+    "주거/트렌드": ["주거", "생활", "소비", "물가", "트렌드", "상권", "유통", "리테일"],
+}
 
 INSIGHTS = [
     "지식산업센터 수요는 중소기업 성장과 직결됩니다. 공급 과잉 지역보다 수요 집중 지역을 선별하는 안목이 승패를 가릅니다.",
@@ -44,14 +40,59 @@ INSIGHTS = [
     "시장이 어려울 때 공부하는 사람이 회복기에 가장 큰 수익을 냅니다.",
 ]
 
+HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 
-def fetch_rss(feed_url: str, max_items: int = 5) -> list:
+
+def clean(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text).strip()
+
+
+def fetch_all_rss(max_items: int = 120) -> list:
+    """연합뉴스 경제 RSS 전체 수집"""
     try:
-        feed = feedparser.parse(feed_url)
-        return [entry.get("title", "").strip() for entry in feed.entries[:max_items] if entry.get("title")]
+        res = requests.get(YNA_ECONOMY_RSS, timeout=10, verify=False, headers=HEADERS)
+        feed = feedparser.parse(res.content)
+        return [clean(entry.get("title", "")) for entry in feed.entries[:max_items] if entry.get("title")]
     except Exception as e:
-        print(f"RSS 오류 ({feed_url}): {e}")
+        print(f"RSS 수집 오류: {e}")
         return []
+
+
+def filter_by_keywords(all_titles: list, keywords: list, max_items: int = 5) -> list:
+    """키워드 기반 필터링"""
+    results = []
+    seen = set()
+    for title in all_titles:
+        if any(kw in title for kw in keywords) and title not in seen:
+            seen.add(title)
+            results.append(title)
+            if len(results) >= max_items:
+                break
+    return results
+
+
+def fetch_naver_news(query: str, display: int = 5) -> list:
+    """Naver API 폴백"""
+    url = "https://openapi.naver.com/v1/search/news.json"
+    headers = {
+        "X-Naver-Client-Id": NAVER_CLIENT_ID,
+        "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+    }
+    try:
+        res = requests.get(url, headers=headers, params={"query": query, "display": display, "sort": "date"}, timeout=10)
+        return [clean(item.get("title", "")) for item in res.json().get("items", [])]
+    except Exception:
+        return []
+
+
+def get_section_news(section: str, all_rss: list) -> list:
+    """RSS 필터링 → 부족하면 Naver API로 보충"""
+    keywords = SECTION_KEYWORDS[section]
+    titles = filter_by_keywords(all_rss, keywords, 5)
+    if len(titles) < 3:
+        naver_query = " ".join(keywords[:3])
+        titles = fetch_naver_news(naver_query, 5)
+    return titles
 
 
 def fetch_us_market() -> str:
@@ -60,7 +101,7 @@ def fetch_us_market() -> str:
     for name, symbol in indices:
         try:
             url = f"https://stooq.com/q/l/?s={symbol}&f=sd2t2ohlcvn&h&e=csv"
-            res = requests.get(url, timeout=10)
+            res = requests.get(url, timeout=10, verify=False)
             rows = res.text.strip().split("\n")
             if len(rows) >= 2:
                 cols = rows[1].split(",")
@@ -80,8 +121,18 @@ def main():
     today_str = now.strftime("%Y-%m-%d")
     lines = [f"⚛️ 경자방 아침 뉴스 리포트 ({today_str})\n"]
 
-    for label, feed_key in SECTIONS:
-        titles = fetch_rss(RSS_FEEDS[feed_key])
+    all_rss = fetch_all_rss()
+    print(f"RSS 수집: {len(all_rss)}개")
+
+    sections = [
+        ("🏘 부동산",    "부동산"),
+        ("💰 금융/기업", "금융/기업"),
+        ("🏭 산업/건설", "산업/건설"),
+        ("🏡 주거/트렌드", "주거/트렌드"),
+    ]
+
+    for label, key in sections:
+        titles = get_section_news(key, all_rss)
         lines.append(f"\n{label}")
         if titles:
             for i, title in enumerate(titles, 1):
@@ -95,7 +146,6 @@ def main():
     insight = INSIGHTS[now.timetuple().tm_yday % len(INSIGHTS)]
     lines.append(f'\n💡 자비스의 한 줄 통찰')
     lines.append(f'"{insight}"')
-
     lines.append(f"\n오늘도 형님의 승리하는 하루를 응원합니다! ⚛️")
 
     message = "\n".join(lines)
