@@ -193,13 +193,62 @@ for p in parts:
 
 ---
 
-## Stage 4: Cover Image Save
+## Stage 4: Cover Image Title Overlay
 
-텍스트 오버레이 없음. 커버 이미지를 그대로 최종 파일로 저장:
+**제목만** 커버 이미지에 추가. 브랜드명/날짜 없음.
 
 ```python
-import shutil
-shutil.copy(raw_cover_path, output_cover_path)
+from PIL import Image, ImageDraw, ImageFont
+import os
+
+def add_cover_title(image_path, output_path, title):
+    img = Image.open(image_path).convert("RGBA")
+    W, H = img.size
+
+    font_dir = "/System/Library/Fonts"
+    try:
+        font_title = ImageFont.truetype(os.path.join(font_dir, "AppleSDGothicNeo.ttc"), int(H * 0.10), index=16)
+    except:
+        font_title = ImageFont.load_default()
+
+    # 그라디언트 오버레이 (35%부터 시작 — 제목이 중앙에 오도록)
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    for i in range(int(H * 0.35), H):
+        alpha = int(210 * (i - H * 0.35) / (H * 0.65))
+        alpha = min(alpha, 200)
+        overlay_draw.line([(0, i), (W, i)], fill=(10, 10, 25, alpha))
+    img = Image.alpha_composite(img, overlay)
+    draw = ImageDraw.Draw(img)
+
+    # 제목 (최대 16자 초과 시 2줄 분리)
+    max_chars = 16
+    if len(title) > max_chars:
+        mid = title.rfind(' ', 0, max_chars + 1)
+        if mid == -1:
+            mid = max_chars
+        lines = [title[:mid], title[mid:].strip()]
+    else:
+        lines = [title]
+
+    # 제목 전체 높이 계산 후 중앙 정렬
+    line_heights = []
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font_title)
+        line_heights.append(bbox[3] - bbox[1])
+    total_h = sum(line_heights) + 10 * (len(lines) - 1)
+    title_y = int(H * 0.50) - total_h // 2
+
+    for i, line in enumerate(lines):
+        bbox = draw.textbbox((0, 0), line, font=font_title)
+        t_tw = bbox[2] - bbox[0]
+        tx = (W - t_tw) // 2
+        draw.text((tx, title_y), line, fill="white", font=font_title,
+                  stroke_width=4, stroke_fill="#080820")
+        title_y += line_heights[i] + 10
+
+    img.convert("RGB").save(output_path, quality=97)
+    return output_path
 ```
 
 ---
@@ -217,7 +266,7 @@ shutil.copy(raw_cover_path, output_cover_path)
 4. Generate cover image:
    a. Claude generates cover prompt based on overall blog topic
    b. Call Imagen 3 API
-   c. Save cover image (no text overlay)
+   c. Add title text overlay (제목만, 브랜드명/날짜 없음) → save final cover
 5. Report all paths + prompts used
 ```
 
