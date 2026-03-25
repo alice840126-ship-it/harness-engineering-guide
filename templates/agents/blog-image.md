@@ -193,75 +193,13 @@ for p in parts:
 
 ---
 
-## Stage 4: Cover Image Text Overlay
+## Stage 4: Cover Image Save
 
-**Python Pillow로 커버 이미지에 텍스트 추가:**
+텍스트 오버레이 없음. 커버 이미지를 그대로 최종 파일로 저장:
 
 ```python
-from PIL import Image, ImageDraw, ImageFont
-import os
-
-def add_cover_overlay(image_path, output_path, title, date):
-    img = Image.open(image_path).convert("RGBA")
-    W, H = img.size
-
-    font_dir = "/System/Library/Fonts"
-    try:
-        font_brand = ImageFont.truetype(os.path.join(font_dir, "AppleSDGothicNeo.ttc"), int(H * 0.038), index=10)
-        font_title = ImageFont.truetype(os.path.join(font_dir, "AppleSDGothicNeo.ttc"), int(H * 0.072), index=16)
-        font_date  = ImageFont.truetype(os.path.join(font_dir, "Helvetica.ttc"), int(H * 0.028), index=0)
-    except:
-        font_brand = ImageFont.load_default()
-        font_title = font_brand
-        font_date  = font_brand
-
-    # 그라디언트 오버레이 (단순 사각형보다 자연스러움)
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
-    for i in range(int(H * 0.55), H):
-        alpha = int(220 * (i - H * 0.55) / (H * 0.45))
-        alpha = min(alpha, 215)
-        overlay_draw.line([(0, i), (W, i)], fill=(15, 15, 35, alpha))
-    img = Image.alpha_composite(img, overlay)
-    draw = ImageDraw.Draw(img)
-
-    # 브랜드명 (골드 + 작은 구분선)
-    brand_text = "구해줘 부동산"
-    b_bbox = draw.textbbox((0, 0), brand_text, font=font_brand)
-    b_tw = b_bbox[2] - b_bbox[0]
-    b_th = b_bbox[3] - b_bbox[1]
-    b_x = (W - b_tw) // 2
-    b_y = int(H * 0.65)
-    draw.text((b_x, b_y), brand_text, fill="#D4AF37", font=font_brand)
-
-    # 제목 (긴 제목 자동 줄 나누기)
-    title_y = b_y + b_th + 14
-    max_chars = 16
-    if len(title) > max_chars:
-        # 단어 단위로 분리 시도, 아니면 중간 분리
-        mid = title.rfind(' ', 0, max_chars + 1)
-        if mid == -1:
-            mid = max_chars
-        lines = [title[:mid], title[mid:].strip()]
-    else:
-        lines = [title]
-
-    for line in lines:
-        t_bbox = draw.textbbox((0, 0), line, font=font_title)
-        t_tw = t_bbox[2] - t_bbox[0]
-        t_th = t_bbox[3] - t_bbox[1]
-        tx = (W - t_tw) // 2
-        draw.text((tx, title_y), line, fill="white", font=font_title,
-                  stroke_width=3, stroke_fill="#080820")
-        title_y += t_th + 6
-
-    # 날짜 (우측 하단)
-    d_bbox = draw.textbbox((0, 0), date, font=font_date)
-    d_tw = d_bbox[2] - d_bbox[0]
-    draw.text((W - d_tw - 28, H - 32), date, fill="#888888", font=font_date)
-
-    img.convert("RGB").save(output_path, quality=97)
-    return output_path
+import shutil
+shutil.copy(raw_cover_path, output_cover_path)
 ```
 
 ---
@@ -279,8 +217,7 @@ def add_cover_overlay(image_path, output_path, title, date):
 4. Generate cover image:
    a. Claude generates cover prompt based on overall blog topic
    b. Call Imagen 3 API
-   c. Save raw cover image
-   d. Add Pillow text overlay → save final cover
+   c. Save cover image (no text overlay)
 5. Report all paths + prompts used
 ```
 

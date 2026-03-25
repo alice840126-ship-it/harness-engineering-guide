@@ -57,6 +57,17 @@ You will receive:
 3. Use Glob to find files with relevant names
 4. Collect all matching file paths
 
+**⚡ Early Exit Rule:**
+검색 결과 관련 파일이 3개 미만이면 즉시 중단하고 아래 형식으로 반환:
+```
+=== KNOWLEDGE CURATION RESULTS ===
+주제: [topic]
+검색 키워드: [keywords]
+결과: 관련 노트 없음 (볼트에 이 주제 관련 파일 3개 미만)
+=== END OF CURATION ===
+```
+Phase 2, 3는 건너뛴다. blog-writer-naver는 SERP 결과만으로 글을 작성한다.
+
 ### Phase 2: Deep Reading
 1. Select top 5-10 most relevant files based on:
    - Keyword density (how many keywords match)
