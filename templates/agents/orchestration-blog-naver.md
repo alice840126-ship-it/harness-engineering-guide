@@ -45,12 +45,13 @@ Execute the optimal Naver blog creation workflow by:
 ### Pipeline Stages:
 
 ```
-[Stage 1a: knowledge-curator] ──┐
-[Stage 1b: naver-analyzer]   ───┤ (3개 병렬 실행)
-[Stage 1c: serp-analyzer]    ───┘
+[Stage 1a: knowledge-curator]        ──┐
+[Stage 1b: naver-analyzer]           ───┤ (3~4개 병렬 실행)
+[Stage 1c: serp-analyzer]            ───┤
+[Stage 1d: realestate-data-collector] ──┘  ← 부동산 키워드일 때만
    ↓
-[Stage 2: blog-writer-naver] ← 세 결과 통합
-   (Naver 데이터 우선, Google은 보조)
+[Stage 2: blog-writer-naver] ← 결과 통합
+   (Naver 데이터 우선, Google은 보조, 실거래가는 표로 삽입)
    ↓
 [Stage 3: blog-image] ← Imagen 3, 커버 + H2 섹션당 1장
    ↓
@@ -74,9 +75,9 @@ Stage 1: 지식 큐레이션 + SERP 분석 (병렬) ...
 
 ---
 
-### 🔵 Stage 1: 3개 병렬 실행 (knowledge-curator + naver-analyzer + serp-analyzer)
+### 🔵 Stage 1: 3~4개 병렬 실행 (knowledge-curator + naver-analyzer + serp-analyzer + realestate-data-collector)
 
-**세 에이전트를 동시에 실행:**
+**에이전트를 동시에 실행 (1d는 부동산 키워드일 때만):**
 
 **1a. knowledge-curator**
 
@@ -131,10 +132,33 @@ Task tool 실행:
     (FAQ 섹션 질문 생성에 활용할 예정)
 ```
 
-**세 에이전트 완료 후 결과 통합.**
+**1d. realestate-data-collector** ← 부동산 키워드일 때만 실행
+
+```
+조건: keyword에 다음 단어가 포함될 때만 실행:
+부동산, 아파트, 지식산업센터, 매매, 전세, 월세, 실거래, 시세, 분양, 오피스텔, 상가, 빌딩
+
+Task tool 실행:
+- subagent_type: realestate-data-collector
+- prompt: |
+    다음 키워드에서 지역/단지 정보를 추출하고 실거래가 데이터를 수집해줘.
+
+    keyword: [keyword]
+
+    수집 방법 (우선순위):
+    1. 키워드에서 부동산 유형과 지역을 파악 → 적절한 사이트 URL 결정
+    2. Python 스크립트로 크롤링 (Bash):
+       python3 /Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents/web_data_scraper.py "[URL]"
+       예: python3 web_data_scraper.py "https://hogangnono.com/region/1144012700"
+    3. 스크립트 실패 시 WebSearch fallback
+    4. 못 찾으면 "못 찾았다"고 솔직히 보고해줘.
+```
+
+**에이전트 완료 후 결과 통합.**
 - **naver-analyzer**: 제목, 구조, 키워드 전략의 주 근거
 - **serp-analyzer**: FAQ 질문 소재로 활용
 - **knowledge-curator**: 차별화 경험/인사이트 소재
+- **realestate-data-collector**: 실거래가 데이터 (있으면 표로 삽입)
 
 ---
 
@@ -160,6 +184,10 @@ Task tool 실행:
 
     === SERP ANALYZER RESULTS (Google — FAQ 소재용) ===
     [Stage 1c 결과 중 PAA 질문 + 연관검색어만]
+    === END ===
+
+    === REALESTATE DATA (부동산 키워드일 때만) ===
+    [Stage 1d 결과 전체 — 없으면 이 섹션 생략]
     === END ===
 
     요구사항:
@@ -255,6 +283,16 @@ Task tool 실행:
 
 예상 검색 노출: [keyword] 관련 검색에서 노출 가능
 ```
+
+---
+
+## ⚠️ 데이터 정확성 원칙 (필수)
+
+- 시세·실거래가·통계 등 수치 데이터는 **절대 추측하지 말 것**
+- 부동산 시세는 호갱노노(hogangnono.com) Chrome 접속 또는 국토부 실거래가에서 확인
+- 데이터를 가져올 수 없으면 빈칸으로 두고 "확인 필요"라고 표시
+- 추정값·감정가·전세가를 매매가로 혼동하지 말 것
+- 블로그 글에 데이터 출처 반드시 명시
 
 ---
 

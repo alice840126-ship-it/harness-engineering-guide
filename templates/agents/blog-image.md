@@ -71,50 +71,60 @@ def parse_sections(markdown_text):
 
 ## Stage 2: Generate Image Prompts (Claude Analysis)
 
-**각 섹션의 내용을 분석하여 구체적인 영어 이미지 프롬프트 생성.**
+**각 섹션의 전체 본문을 읽고 "이 섹션이 무슨 이야기를 하고 있는가"를 파악한 뒤 그 장면을 그린다.**
 
 이 단계는 Claude(현재 에이전트)가 직접 수행합니다.
 
-### Prompt Generation Rules
+### 핵심 원칙 — 제목 금지, 내용 기반
 
-섹션 제목 + 본문 내용을 읽고 다음 기준으로 영어 프롬프트 작성:
+프롬프트를 만들 때 **H2 제목은 참고만** 합니다. 이미지는 오직 **섹션 본문이 실제로 설명하는 상황**을 기반으로 만듭니다.
 
-**1. 핵심 시각 요소 파악**
-- 섹션이 설명하는 개념/행동/결과를 구체적 장면으로 변환
-- 추상적 개념 → 시각적 은유 (예: "수익률 분석" → "analyst examining financial charts with rising arrows")
-- 인물, 사물, 공간, 동작을 구체적으로 기술
+**3단계 사고 과정 (반드시 순서대로):**
 
-**2. 프롬프트 구조 (순서 엄수):**
 ```
-[Style] + [Main subject/scene in detail] + [Supporting elements] + [Background/atmosphere] + [Technical specs] + [Negative prompt]
+Step 1. 섹션 본문 전체를 읽는다
+Step 2. 한 문장으로 요약한다: "이 섹션은 [무엇]에 대해 [어떤 상황]을 설명하고 있다"
+Step 3. 그 상황을 눈에 보이는 장면으로 변환해서 영어 프롬프트를 작성한다
 ```
 
-**3. 스타일 기준:**
-- 블로그용 전문 일러스트: `professional editorial illustration, magazine quality`
-- 세부 묘사: `highly detailed, sharp lines, rich textures`
-- 색상 팔레트: 주제에 맞게 선택 (AI/Tech → 파란-보라 그라디언트, 부동산 → 네이비+골드, 공부 → 초록+노랑)
-- 배경: `clean light background with subtle gradient`
+**Step 2 요약이 먼저 나와야 프롬프트를 작성할 수 있다. 요약 없이 프롬프트 작성 금지.**
 
-**4. 품질 필수 키워드 (모든 프롬프트에 포함):**
+### 잘못된 방식 vs 올바른 방식
+
+**잘못된 방식 (제목 키워드만 보고 만드는 경우):**
+```
+섹션 제목: "아파트 시세 전망"
+→ "전망" 키워드 포착
+→ mountain view, scenic landscape 생성  ← 완전히 틀림
+```
+
+**올바른 방식 (본문 내용을 읽고 만드는 경우):**
+```
+섹션 제목: "아파트 시세 전망"
+본문 내용: "2026년 1분기 실거래가는 전분기 대비 3% 상승했으며, 금리 인하 기조로 하반기 추가 상승이 예상됩니다..."
+
+Step 1. 본문 읽음
+Step 2. 요약: "이 섹션은 아파트 가격 데이터와 향후 가격 예측에 대해 설명하고 있다"
+Step 3. 프롬프트: "Professional editorial illustration, financial analyst reviewing apartment price trend charts on multiple screens, upward trending graphs showing quarterly data, real estate market dashboard with percentage indicators, modern office environment, navy and gold palette, dramatic lighting, highly detailed, magazine quality, 16:9, no text"
+```
+
+### 프롬프트 구조
+
+```
+[Style] + [Step 2에서 도출한 구체적 장면] + [보조 요소] + [분위기/배경] + [품질 키워드] + [no text]
+```
+
+**품질 필수 키워드 (모든 프롬프트에 포함):**
 ```
 professional editorial illustration, highly detailed, sharp, magazine quality, 16:9 aspect ratio, no text, no letters, no words, no typography
 ```
 
-**5. 금지 사항:**
-- `line art` (저품질) 사용 금지
-- 너무 단순한 묘사 금지 ("a person working" 금지 → "a focused professional at a modern workstation reviewing data dashboards, warm desk lamp light casting subtle shadows" 사용)
-
-### 예시 프롬프트 변환
-
-**Before (낮은 품질):**
-```
-Line art illustration, investment analysis, black and white, minimal
-```
-
-**After (높은 품질):**
-```
-Professional editorial illustration, financial analyst at modern desk examining multiple glowing screens showing real estate investment charts, upward trending graphs, digital property listings, detailed office environment with city view through window, deep navy and gold color palette, dramatic ambient lighting, highly detailed, sharp, magazine quality, 16:9 aspect ratio, no text, no letters, no words
-```
+**금지:**
+- Step 2 요약 없이 프롬프트 바로 작성
+- 제목에서 단어 하나 뽑아서 직역
+- `line art` 사용
+- 너무 단순한 묘사 ("a person working" → "a focused professional at a modern workstation reviewing data dashboards" 수준으로)
+- 내용과 무관한 자연 풍경만 단독으로
 
 ---
 
@@ -207,7 +217,7 @@ def add_cover_title(image_path, output_path, title):
 
     font_dir = "/System/Library/Fonts"
     try:
-        font_title = ImageFont.truetype(os.path.join(font_dir, "AppleSDGothicNeo.ttc"), int(H * 0.10), index=16)
+        font_title = ImageFont.truetype(os.path.join(font_dir, "AppleSDGothicNeo.ttc"), int(H * 0.075), index=16)
     except:
         font_title = ImageFont.load_default()
 
@@ -221,22 +231,29 @@ def add_cover_title(image_path, output_path, title):
     img = Image.alpha_composite(img, overlay)
     draw = ImageDraw.Draw(img)
 
-    # 제목 (최대 16자 초과 시 2줄 분리)
-    max_chars = 16
-    if len(title) > max_chars:
-        mid = title.rfind(' ', 0, max_chars + 1)
-        if mid == -1:
-            mid = max_chars
-        lines = [title[:mid], title[mid:].strip()]
-    else:
-        lines = [title]
+    # 단어 단위 줄바꿈 — 이미지 폭의 60% 안에 (네이버 블로그 썸네일 양쪽 크롭 대비)
+    max_width = int(W * 0.60)
+    words = title.split(' ')
+    lines = []
+    current_line = ""
+    for word in words:
+        test_line = (current_line + ' ' + word).strip()
+        bbox = draw.textbbox((0, 0), test_line, font=font_title)
+        if bbox[2] - bbox[0] > max_width and current_line:
+            lines.append(current_line)
+            current_line = word
+        else:
+            current_line = test_line
+    if current_line:
+        lines.append(current_line)
 
     # 제목 전체 높이 계산 후 중앙 정렬
     line_heights = []
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font_title)
         line_heights.append(bbox[3] - bbox[1])
-    total_h = sum(line_heights) + 10 * (len(lines) - 1)
+    line_gap = int(H * 0.02)
+    total_h = sum(line_heights) + line_gap * (len(lines) - 1)
     title_y = int(H * 0.50) - total_h // 2
 
     for i, line in enumerate(lines):
@@ -245,7 +262,7 @@ def add_cover_title(image_path, output_path, title):
         tx = (W - t_tw) // 2
         draw.text((tx, title_y), line, fill="white", font=font_title,
                   stroke_width=4, stroke_fill="#080820")
-        title_y += line_heights[i] + 10
+        title_y += line_heights[i] + line_gap
 
     img.convert("RGB").save(output_path, quality=97)
     return output_path
