@@ -122,8 +122,8 @@ curl -s -X POST "https://openapi.naver.com/v1/datalab/search" \
   -H "X-Naver-Client-Secret: ${NAVER_CLIENT_SECRET}" \
   -H "Content-Type: application/json" \
   -d '{
-    "startDate": "2025-09-01",
-    "endDate": "2026-03-25",
+    "startDate": "'$(date -v-6m +%Y-%m-%d)'",
+    "endDate": "'$(date +%Y-%m-%d)'",
     "timeUnit": "month",
     "keywordGroups": [
       {
@@ -134,7 +134,7 @@ curl -s -X POST "https://openapi.naver.com/v1/datalab/search" \
   }'
 ```
 
-**날짜**: startDate는 6개월 전, endDate는 오늘 날짜로 설정
+**날짜**: startDate는 실행일 기준 6개월 전, endDate는 실행일 당일로 **반드시 동적 계산**할 것. 위 예시의 `$(date ...)` 구문 참고. 절대 날짜를 하드코딩하지 말 것.
 
 **트렌드 분석 포인트:**
 - 상승 중인가 / 하락 중인가

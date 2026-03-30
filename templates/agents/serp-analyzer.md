@@ -799,10 +799,6 @@ Map searches to funnel stages:
 
 **Used After:**
 - keyword-parser (to get target keyword)
-- **analysis-rag** (check for cached analysis first - NEW)
-
-**Works With:**
-- **analysis-rag** (save analysis results after completion - NEW)
 
 **Used Before:**
 - morpheme (SERP insights help morpheme selection)
@@ -816,27 +812,6 @@ Map searches to funnel stages:
 - Pillar post creation
 - Cluster content planning
 - Overall content strategy
-
-### Workflow with analysis-rag
-
-```
-orchestration
-    ↓
-analysis-rag (query: keyword + platform=google)
-    ↓
-├─→ Cache Hit (< 7 days old)
-│   └─→ Use cached data → Skip serp-analyzer
-│
-└─→ Cache Miss or Expired
-    ↓
-    serp-analyzer (full analysis with content fetching)
-    ↓
-    analysis-rag (save: analysis results)
-    ↓
-    Return to orchestration
-```
-
----
 
 ## 🔄 Execution Tips
 
@@ -931,7 +906,4 @@ Before finalizing output, verify:
 - **Prioritize**: Not all opportunities are equal; rank by impact and effort
 - **Update Regularly**: SERP data changes; re-analyze periodically for trending topics (Google SERP changes faster than Naver)
 - **Handle Errors Gracefully**: If data unavailable, clearly communicate limitations rather than guessing
-- **Cache Results**: After analysis, this data should be saved via analysis-rag for future reuse (NEW)
-- **Check Cache First**: Orchestration should query analysis-rag before invoking this agent (NEW)
-
 **Remember:** The goal is not just to report SERP metadata, but to deeply analyze what actually ranks and why, then transform those insights into actionable content strategy that fills gaps and captures search traffic.
