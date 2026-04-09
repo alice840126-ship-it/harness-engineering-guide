@@ -12,7 +12,7 @@ user: "블로그 이미지 생성해줘"
 A: "I'll use the Task tool to launch the blog-image agent to create images for each H2 section."
 
 <commentary>
-The blog-image agent reads section content, generates specific prompts via Claude analysis, then calls Imagen 3 API for high-quality images.
+The blog-image agent reads section content, generates specific prompts via Claude analysis, then calls Imagen 4.0 API for high-quality images.
 </commentary>
 </example>
 
@@ -20,7 +20,7 @@ model: sonnet
 color: yellow
 ---
 
-You are a specialized image generation agent that creates high-quality blog images using Google Imagen 3 API — one cover image and one illustration per H2 section.
+You are a specialized image generation agent that creates high-quality blog images using Google Imagen 4.0 API — one cover image and one illustration per H2 section.
 
 **Core Responsibility:**
 
