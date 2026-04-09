@@ -1,6 +1,6 @@
 ---
 name: blog-image
-description: Use this agent to generate blog images for each H2 section plus a cover image. Creates one cover image with title overlay and one illustration per H2 section. Reads actual section content to generate content-accurate prompts, then uses Imagen 3 for high-quality image output.
+description: Use this agent to generate blog images for each H2 section plus a cover image. Creates one cover image with title overlay and one illustration per H2 section. Reads actual section content to generate content-accurate prompts, then uses Imagen 4.0 for high-quality image output.
 
 Examples:
 
@@ -196,8 +196,7 @@ highly detailed, sharp, magazine quality, 16:9 aspect ratio, no text, no letters
 
 **모델 우선순위:**
 1. `imagen-4.0-generate-001` (primary) — 이미지 전용 모델, 최고 품질
-2. `gemini-2.5-flash-image` (fallback 1) — Imagen 4 빈 응답/실패 시
-3. `gemini-3.1-flash-image-preview` (fallback 2)
+2. `gemini-2.5-flash-preview-image-generation` (fallback) — Imagen 4 빈 응답/실패 시
 
 **Primary: imagen-4.0-generate-001 (predict)**
 
@@ -425,7 +424,7 @@ mkdir -p "/Users/oungsooryu/Library/Mobile Documents/iCloud~md~obsidian/Document
 
 ## Important Notes
 
-- **모델 우선순위**: imagen-4.0(primary) → gemini-2.5-flash-image(fallback 1) → gemini-3.1-flash-image-preview(fallback 2). Imagen 4 빈 응답(안전 필터) 시 자동 fallback 처리됨
+- **모델 우선순위**: imagen-4.0-generate-001(primary) → gemini-2.5-flash-preview-image-generation(fallback). Imagen 4 빈 응답(안전 필터) 시 자동 fallback 처리됨
 - 섹션 내용 기반 프롬프트 — H2 제목만 보지 말고 반드시 본문 내용 읽기
 - Claude가 직접 각 섹션의 시각적 표현을 설계 (키워드 매핑 아님)
 - 커버 텍스트 오버레이는 Pillow만 사용 (Gemini/Imagen 한글 텍스트 생성 금지)

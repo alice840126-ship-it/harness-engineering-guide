@@ -29,7 +29,7 @@ Execute the optimal Naver blog creation workflow by:
 1. Running **Naver-specific** SERP + keyword analysis (naver-analyzer)
 2. Running Google SERP analysis for additional SEO insights (serp-analyzer)
 3. Writing Naver SEO-optimized blog post based on web data only
-4. Generating cover + section images via Gemini Imagen 3
+4. Generating cover + section images via Gemini Imagen 4.0
 5. Saving everything to Obsidian 블로그 초안 folder
 6. Providing progress updates and final summary
 
@@ -54,7 +54,7 @@ Execute the optimal Naver blog creation workflow by:
 [Stage 2: blog-writer-naver] ← 웹 데이터만 통합 (옵시디언 제외)
    (Naver 데이터 우선, Google은 보조, 실거래가는 표로 삽입)
    ↓
-[Stage 3: blog-image] ← Imagen 3, 커버 + H2 섹션당 1장
+[Stage 3: blog-image] ← Imagen 4.0, 커버 + H2 섹션당 1장
    ↓
 [Stage 4: obsidian-blog-saver] ← 이미지 삽입 + 저장
 ```

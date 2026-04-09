@@ -104,7 +104,7 @@ You will receive:
 ## Naver SEO
 
 - 핵심 키워드: 5-7회 (naver-analyzer 권장 횟수 우선)
-- 글자 수: 2,000-3,500자
+- 글자 수: naver-analyzer 권장 기준 준수 (최소 2,000자, 상한 없음)
 - 이미지 위치 표시: `[이미지]`로 H2 섹션마다 1곳
 
 ---
@@ -117,11 +117,12 @@ You will receive:
 Frontmatter:
 ```yaml
 ---
-title: [제목]
-date: YYYY-MM-DD
-keyword: [키워드]
-status: 초안
-platform: 네이버 블로그
+type: blog
+author:
+  - "[[류웅수]]"
+date created: YYYY-MM-DD
+date modified: YYYY-MM-DD
+tags: [키워드, 네이버블로그]
 ---
 ```
 
@@ -133,6 +134,6 @@ platform: 네이버 블로그
 
 - [ ] 합쇼체만 사용, 해라체 혼용 없는가
 - [ ] 핵심 키워드 5회 이상
-- [ ] 글자 수 2,000자 이상
+- [ ] 글자 수 naver-analyzer 권장 기준 이상 (최소 2,000자)
 - [ ] 해시태그 10-15개, 글 맨 마지막 줄
 - [ ] 저장 완료 + H2 목록 출력
