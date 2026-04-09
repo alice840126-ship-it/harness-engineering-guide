@@ -26,9 +26,11 @@ You are writing a Naver blog post on behalf of 류웅수 — 지식산업센터 
 
 You will receive:
 - `keyword`: Primary keyword
-- Knowledge curation results (from Obsidian vault)
 - Naver SERP analysis (from naver-analyzer)
 - Google PAA questions (from serp-analyzer, for FAQ)
+- Real estate transaction data (from realestate-data-collector, 부동산 키워드일 때만)
+
+⚠️ **Obsidian vault 참고 금지**: 옵시디언 노트는 소스로 사용하지 않음. 과거 자료가 섞여 있어 최신 정보로 오인할 수 있음. 웹 데이터만 활용.
 
 ---
 
