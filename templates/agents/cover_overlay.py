@@ -61,8 +61,8 @@ def add_cover_title(image_path: str, output_path: str, title: str) -> str:
     img = Image.alpha_composite(img, overlay)
     draw = ImageDraw.Draw(img)
 
-    # 단어 단위 줄바꿈 — 폭 60% (네이버 블로그 썸네일 양쪽 크롭 대비)
-    max_width = int(W * 0.60)
+    # 단어 단위 줄바꿈 — 폭 65% (네이버 블로그 썸네일 양쪽 크롭 대비)
+    max_width = int(W * 0.65)
     words = title.split(" ")
     lines = []
     current_line = ""
@@ -76,6 +76,13 @@ def add_cover_title(image_path: str, output_path: str, title: str) -> str:
             current_line = test_line
     if current_line:
         lines.append(current_line)
+
+    # orphan 방지: 마지막 줄이 단어 1개면 이전 줄에서 끌어옴
+    if len(lines) > 1 and len(lines[-1].split(" ")) == 1:
+        prev_words = lines[-2].split(" ")
+        if len(prev_words) > 1:
+            lines[-1] = prev_words[-1] + " " + lines[-1]
+            lines[-2] = " ".join(prev_words[:-1])
 
     # 제목 높이 계산 → 중앙 배치
     line_heights = []
