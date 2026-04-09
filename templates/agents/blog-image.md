@@ -91,7 +91,7 @@ Step 3. Step 0에서 정한 스타일 + Step 2 내용을 결합하여 영어 프
 **Step 2 요약이 먼저 나와야 프롬프트를 작성할 수 있다. 요약 없이 프롬프트 작성 금지.**
 **Step 3 스타일 선택이 먼저 나와야 프롬프트를 작성할 수 있다. 글 전체에서 하나의 스타일을 정하고 모든 섹션에 동일하게 적용할 것.**
 
-### 비주얼 스타일 테이블 (30종 — BananaX 추천 기반)
+### 비주얼 스타일 테이블 (35종 — BananaX 추천 기반)
 
 **글 전체 주제를 보고 스타일 1개를 선택한다. 한 글 안에서는 모든 이미지에 동일 스타일 적용.**
 
@@ -127,6 +127,11 @@ Step 3. Step 0에서 정한 스타일 + Step 2 내용을 결합하여 영어 프
 | 28 | 기하학 | Geometric Abstraction / Bauhaus / Grain | 구조 분석, 프레임워크, 모델 설명 |
 | 29 | 팝/모던 | Flat illustration / Corporate / Memphis | 비즈니스, 기업 문화, 협업 |
 | 30 | 팝/모던 | Flat illustration / Material design / Modern | 일반 사용법, 튜토리얼, 입문 |
+| 31 | 강렬/대비 | Brutalism / Monospace / High Contrast | 경고, 주의사항, 강한 주장, 논쟁적 주제 |
+| 32 | 레트로 | Vaporwave / 90s UI / Pastel | 향수, 회고, 레트로 트렌드, 문화 콘텐츠 |
+| 33 | 구성주의 | Constructivism / Red / Propaganda poster | 혁신 선언, 변화 촉구, 캠페인성 콘텐츠 |
+| 34 | 3D/모던 | Claymorphism / 3D / Soft shadow | 제품 리뷰, 앱 소개, 친근한 기술 설명 |
+| 35 | 수공예 | Embroidery / Textile / Handcraft | 전통 공예, 수공업, 따뜻한 감성, 로컬 콘텐츠 |
 
 ### 잘못된 방식 vs 올바른 방식
 
@@ -182,7 +187,7 @@ highly detailed, sharp, magazine quality, 16:9 aspect ratio, no text, no letters
 - 제목에서 단어 하나 뽑아서 직역
 - 너무 단순한 묘사 ("a person working" → "a focused professional at a modern workstation reviewing data dashboards" 수준으로)
 - 내용과 무관한 자연 풍경만 단독으로
-- **포토리얼/사진풍 이미지 생성 금지** — 반드시 위 30종 스타일 테이블에서 선택할 것. Photorealistic, stock photo, photograph 등의 키워드 사용 금지
+- **포토리얼/사진풍 이미지 생성 금지** — 반드시 위 35종 스타일 테이블에서 선택할 것. Photorealistic, stock photo, photograph 등의 키워드 사용 금지
 
 **스타일 이탈 방지 체크리스트 (모든 섹션 프롬프트 작성 시):**
 1. Step 0에서 선택한 스타일 번호를 프롬프트 앞에 주석으로 기록: `// Style #16: Hologram / UI / Blue`
@@ -265,66 +270,27 @@ for p in parts:
 
 **제목만** 커버 이미지에 추가. 브랜드명/날짜 없음.
 
+**`cover_overlay.py` 모듈 사용 (필수):**
+
 ```python
-from PIL import Image, ImageDraw, ImageFont
-import os
+import sys
+sys.path.insert(0, "/Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents")
+from cover_overlay import add_cover_title
 
-def add_cover_title(image_path, output_path, title):
-    img = Image.open(image_path).convert("RGBA")
-    W, H = img.size
-
-    font_dir = "/System/Library/Fonts"
-    try:
-        font_title = ImageFont.truetype(os.path.join(font_dir, "AppleSDGothicNeo.ttc"), int(H * 0.075), index=16)
-    except:
-        font_title = ImageFont.load_default()
-
-    # 그라디언트 오버레이 (35%부터 시작 — 제목이 중앙에 오도록)
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
-    for i in range(int(H * 0.35), H):
-        alpha = int(210 * (i - H * 0.35) / (H * 0.65))
-        alpha = min(alpha, 200)
-        overlay_draw.line([(0, i), (W, i)], fill=(10, 10, 25, alpha))
-    img = Image.alpha_composite(img, overlay)
-    draw = ImageDraw.Draw(img)
-
-    # 단어 단위 줄바꿈 — 이미지 폭의 60% 안에 (네이버 블로그 썸네일 양쪽 크롭 대비)
-    max_width = int(W * 0.60)
-    words = title.split(' ')
-    lines = []
-    current_line = ""
-    for word in words:
-        test_line = (current_line + ' ' + word).strip()
-        bbox = draw.textbbox((0, 0), test_line, font=font_title)
-        if bbox[2] - bbox[0] > max_width and current_line:
-            lines.append(current_line)
-            current_line = word
-        else:
-            current_line = test_line
-    if current_line:
-        lines.append(current_line)
-
-    # 제목 전체 높이 계산 후 중앙 정렬
-    line_heights = []
-    for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=font_title)
-        line_heights.append(bbox[3] - bbox[1])
-    line_gap = int(H * 0.02)
-    total_h = sum(line_heights) + line_gap * (len(lines) - 1)
-    title_y = int(H * 0.50) - total_h // 2
-
-    for i, line in enumerate(lines):
-        bbox = draw.textbbox((0, 0), line, font=font_title)
-        t_tw = bbox[2] - bbox[0]
-        tx = (W - t_tw) // 2
-        draw.text((tx, title_y), line, fill="white", font=font_title,
-                  stroke_width=4, stroke_fill="#080820")
-        title_y += line_heights[i] + line_gap
-
-    img.convert("RGB").save(output_path, quality=97)
-    return output_path
+add_cover_title("raw_cover.png", "final_cover.png", "블로그 제목")
 ```
+
+또는 Bash에서 직접 실행:
+```bash
+python3 /Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents/cover_overlay.py \
+  "raw_cover.png" "final_cover.png" "블로그 제목"
+```
+
+**동작:**
+- 하단 35%부터 그라디언트 오버레이
+- 제목은 이미지 중앙(50%)에 배치
+- 단어 단위 줄바꿈 (이미지 폭 60% 이내, 네이버 썸네일 크롭 대비)
+- AppleSDGothicNeo ExtraBold, stroke_width=4
 
 ---
 

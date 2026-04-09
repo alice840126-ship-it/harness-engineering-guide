@@ -113,7 +113,9 @@ WebFetch(url="[블로그 URL]", prompt="이 네이버 블로그 포스트에서 
 
 ---
 
-## Stage 3: 네이버 DataLab 트렌드 분석
+## Stage 3: 네이버 DataLab 트렌드 분석 (선택 — 실패 시 스킵)
+
+⚠️ **현재 API 키에 DataLab scope가 없어서 실패할 수 있음.** 실패 시 이 Stage를 스킵하고 Stage 4로 진행. 트렌드 섹션은 "데이터 없음"으로 표시.
 
 **Naver DataLab Search Trend API:**
 ```bash
@@ -136,7 +138,10 @@ curl -s -X POST "https://openapi.naver.com/v1/datalab/search" \
 
 **날짜**: startDate는 실행일 기준 6개월 전, endDate는 실행일 당일로 **반드시 동적 계산**할 것. 위 예시의 `$(date ...)` 구문 참고. 절대 날짜를 하드코딩하지 말 것.
 
-**트렌드 분석 포인트:**
+**응답에 errorCode 024 (Scope Status Invalid)가 오면:**
+→ 이 Stage 즉시 스킵, 트렌드 섹션은 "DataLab 미사용 (API 권한 없음)"으로 출력
+
+**정상 응답 시 트렌드 분석 포인트:**
 - 상승 중인가 / 하락 중인가
 - 계절성 있는가 (특정 월 급등)
 - 최근 3개월 트렌드 방향
