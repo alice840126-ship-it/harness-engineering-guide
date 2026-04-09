@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ko" class="theme-dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>공시법 핵심 학습노트</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html.theme-dark {
+      --bg: #0A0A0A; --surface: #141414; --surface-hover: #1e1e1e;
+      --border: rgba(255,255,255,0.07);
+      --text: #EDEDED; --text-secondary: #888;
+      --accent: #3b82f6; --accent-secondary: #8b5cf6;
+      --positive: #10b981; --negative: #f43f5e; --warning: #f59e0b;
+    }
+    html.theme-light {
+      --bg: #F5F5F0; --surface: #FFFFFF; --surface-hover: #F0F0EB;
+      --border: rgba(0,0,0,0.08);
+      --text: #0f172a; --text-secondary: #64748b;
+      --accent: #2563eb; --accent-secondary: #7c3aed;
+      --positive: #059669; --negative: #e11d48; --warning: #d97706;
+    }
+
+    body {
+      font-family: 'Noto Sans KR', -apple-system, sans-serif;
+      background: var(--bg); color: var(--text);
+      line-height: 1.6; padding-bottom: 60px;
+    }
+
+    .page-header {
+      background: linear-gradient(135deg, #0f1c2e 0%, #1a2f4a 60%, #0f3460 100%);
+      padding: 28px 20px 24px;
+      text-align: center;
+    }
+    html.theme-light .page-header { background: linear-gradient(135deg, #1e3a5f, #2563eb); }
+    .badge { display:inline-block; background:rgba(59,130,246,0.3); color:#93c5fd; font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; margin-bottom:8px; }
+    .page-header h1 { font-size:20px; font-weight:700; color:#fff; margin-bottom:4px; }
+    .page-header p { font-size:12px; color:rgba(255,255,255,0.55); }
+
+    /* TABS */
+    .tab-bar {
+      display:flex; overflow-x:auto; border-bottom:1px solid var(--border);
+      background: var(--surface); position:sticky; top:0; z-index:50;
+      scrollbar-width:none;
+    }
+    .tab-bar::-webkit-scrollbar { display:none; }
+    .tab-btn {
+      flex-shrink:0; padding:11px 16px; font-size:12px; font-weight:600;
+      color:var(--text-secondary); background:none; border:none; cursor:pointer;
+      white-space:nowrap; font-family:inherit; border-bottom:2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+    /* CONTENT PANELS */
+    .panel { display:none; padding:16px; }
+    .panel.active { display:block; }
+
+    /* SECTION TITLE */
+    .sec-title {
+      font-size:13px; font-weight:700; color:var(--text-secondary);
+      text-transform:uppercase; letter-spacing:0.07em; margin-bottom:12px;
+      display:flex; align-items:center; gap:6px;
+    }
+    .sec-title::before { content:''; display:inline-block; width:3px; height:13px; background:var(--accent); border-radius:2px; }
+
+    /* CARDS */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px; }
+    .card-title { font-size:15px; font-weight:700; margin-bottom:10px; color:var(--text); }
+    .card-title .emoji { margin-right:6px; }
+
+    /* KEY POINT LIST */
+    .kp-list { list-style:none; display:flex; flex-direction:column; gap:8px; }
+    .kp-item { font-size:13px; line-height:1.6; padding:9px 12px; border-radius:8px; background:var(--surface-hover); }
+    .kp-item .k { color:#fbbf24; font-weight:700; }
+    .kp-item .o { color:#34d399; font-weight:700; }
+    .kp-item .x { color:#f87171; font-weight:600; }
+    .kp-item .b { color:#60a5fa; font-weight:600; }
+    .kp-item .r { color:#fb7185; font-weight:700; }
+    .kp-item .p { color:#a78bfa; font-weight:600; }
+
+    /* COMPARE TABLE */
+    .cmp-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .cmp-table th { background:var(--surface-hover); padding:8px 10px; text-align:center; font-size:11px; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border); }
+    .cmp-table th:first-child { text-align:left; }
+    .cmp-table td { padding:8px 10px; text-align:center; border-bottom:1px solid var(--border); font-size:12px; }
+    .cmp-table td:first-child { text-align:left; font-weight:500; }
+    .cmp-table tr:last-child td { border-bottom:none; }
+    .cy { color:#34d399; font-weight:700; }
+    .cn { color:#f87171; font-weight:500; }
+    .cb { color:#60a5fa; font-weight:600; }
+    .cw { color:#fbbf24; font-weight:700; }
+
+    /* TIMELINE */
+    .timeline { display:flex; flex-direction:column; gap:8px; }
+    .tl-item { display:flex; align-items:flex-start; gap:12px; }
+    .tl-day { min-width:52px; text-align:center; background:var(--accent); color:#fff; font-size:12px; font-weight:700; padding:4px 8px; border-radius:6px; }
+    .tl-day.red { background:#f43f5e; }
+    .tl-day.green { background:#10b981; }
+    .tl-day.yellow { background:#f59e0b; color:#000; }
+    .tl-day.purple { background:#8b5cf6; }
+    .tl-content { font-size:13px; line-height:1.5; padding-top:3px; }
+
+    /* OX QUIZ */
+    .quiz-block { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px; }
+    .quiz-q { font-size:13px; font-weight:500; margin-bottom:10px; line-height:1.6; }
+    .quiz-meta { font-size:11px; color:var(--text-secondary); margin-bottom:8px; }
+    .quiz-btns { display:flex; gap:8px; }
+    .ox-btn {
+      flex:1; padding:10px; border-radius:8px; border:1px solid var(--border);
+      font-size:16px; font-weight:700; cursor:pointer; background:var(--surface-hover);
+      font-family:inherit; transition:all 0.2s; color:var(--text);
+    }
+    .ox-btn:hover { background:var(--border); }
+    .ox-btn.correct { background:rgba(16,185,129,0.15); border-color:#10b981; color:#34d399; }
+    .ox-btn.wrong   { background:rgba(244,63,94,0.12); border-color:#f43f5e; color:#fb7185; }
+    .ox-btn.reveal  { background:rgba(59,130,246,0.12); border-color:#3b82f6; color:#60a5fa; }
+    .quiz-answer { display:none; margin-top:10px; padding:10px 12px; border-radius:8px; font-size:12px; line-height:1.6; }
+    .quiz-answer.show { display:block; }
+    .quiz-answer.correct-a { background:rgba(16,185,129,0.1); color:#34d399; }
+    .quiz-answer.wrong-a   { background:rgba(244,63,94,0.1); color:#fb7185; }
+
+    /* HIGHLIGHT BOX */
+    .hl-box { border-radius:10px; padding:12px 14px; margin-bottom:10px; font-size:13px; line-height:1.7; }
+    .hl-box.blue  { background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.2); }
+    .hl-box.yellow{ background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); }
+    .hl-box.red   { background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.2); }
+    .hl-box.green { background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); }
+    .hl-box .hl-title { font-weight:700; margin-bottom:6px; font-size:13px; }
+    .hl-box.blue .hl-title { color:#60a5fa; }
+    .hl-box.yellow .hl-title { color:#fbbf24; }
+    .hl-box.red .hl-title { color:#fb7185; }
+    .hl-box.green .hl-title { color:#34d399; }
+
+    /* VIZ MENU */
+    .viz-menu { position:fixed; top:12px; right:12px; z-index:1000; }
+    .viz-menu-toggle { background:rgba(30,30,30,0.9); border:1px solid rgba(255,255,255,0.12); color:#fff; width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; }
+    .viz-menu-dropdown { display:none; position:absolute; top:42px; right:0; background:rgba(20,20,20,0.95); border:1px solid rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; min-width:140px; }
+    .viz-menu-dropdown.open { display:block; }
+    .viz-menu-item { display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:12px; color:#ddd; cursor:pointer; border:none; background:none; width:100%; font-family:inherit; }
+    .viz-menu-item:hover { background:rgba(255,255,255,0.07); }
+
+    /* AUTHOR */
+    .author-badge { position:fixed; top:50px; right:12px; background:rgba(0,0,0,0.4); color:rgba(255,255,255,0.5); font-size:10px; padding:3px 8px; border-radius:20px; pointer-events:none; z-index:999; }
+
+    /* BOTTOM NAV */
+    .bottom-nav { position:fixed; bottom:0; left:0; right:0; background:rgba(15,15,15,0.97); backdrop-filter:blur(20px); border-top:1px solid var(--border); display:flex; height:50px; z-index:100; }
+    html.theme-light .bottom-nav { background:rgba(255,255,255,0.97); }
+    .nav-btn { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; background:none; border:none; color:var(--text-secondary); font-size:10px; font-family:inherit; }
+    .nav-btn .nav-icon { font-size:17px; }
+    .nav-btn.active { color:var(--accent); }
+
+    /* PAGES */
+    .page { display:none; }
+    .page.active { display:block; }
+
+    @keyframes fadeInUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+    .fade-in { animation:fadeInUp 0.35s ease both; }
+
+    ::-webkit-scrollbar { width:3px; height:3px; }
+    ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:3px; }
+    html.theme-light ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.1); }
+
+    @media print { .viz-menu,.bottom-nav,.author-badge,.tab-bar { display:none !important; } .panel { display:block !important; } }
+  </style>
+</head>
+<body>
+<a href="#main-content" style="position:absolute;left:-9999px">메인으로</a>
+
+<div class="viz-menu">
+  <button class="viz-menu-toggle" onclick="toggleMenu()">⚙</button>
+  <div class="viz-menu-dropdown" id="vizMenu">
+    <button class="viz-menu-item" onclick="toggleTheme()">🌗 테마</button>
+    <button class="viz-menu-item" onclick="window.print()">🖨 인쇄</button>
+  </div>
+</div>
+<div class="author-badge">제작자 류웅수</div>
+
+<main id="main-content">
+
+<!-- ===== PAGE 1: 등기신청 ===== -->
+<div class="page active fade-in" id="page1">
+  <div class="page-header">
+    <span class="badge">부동산등기법</span>
+    <h1>등기신청 핵심 정리 📋</h1>
+    <p>공동·단독·대위·직권 완전 정복</p>
+  </div>
+
+  <div style="padding:16px 16px 0">
+
+    <!-- 공동신청 -->
+    <div class="sec-title">공동신청 — 누가 의무자? 권리자?</div>
+    <div class="card">
+      <div class="card-title"><span class="emoji">👥</span>소유권이전등기</div>
+      <ul class="kp-list">
+        <li class="kp-item"><span class="r">상속·합병·토지수용</span> → 등기의무자 <span class="x">없음</span> (등기권리자만 신청)</li>
+        <li class="kp-item">매매 → 의무자: <span class="b">매도인</span> / 권리자: <span class="o">매수인</span></li>
+        <li class="kp-item">유증 → 의무자: <span class="b">유언집행자 또는 상속인</span> / 권리자: <span class="o">수증자</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="emoji">🔒</span>저당권 등기</div>
+      <ul class="kp-list">
+        <li class="kp-item">저당권 <span class="k">설정</span> → 의무자: 저당권설정자 / 권리자: 저당권자</li>
+        <li class="kp-item">저당권 <span class="k">변경</span> 채권액 증액 → 의무자: <span class="b">저당권설정자</span> / 권리자: 저당권자</li>
+        <li class="kp-item">저당권 <span class="k">변경</span> 채권액 감액 → 의무자: <span class="b">저당권자</span> / 권리자: 저당권설정자</li>
+        <li class="kp-item">저당권 <span class="k">이전</span> → 의무자: 양도인 / 권리자: 양수인</li>
+        <li class="kp-item">저당권 <span class="k">말소</span> (피담보채권 소멸) → 의무자: 저당권자 / 권리자: 저당권설정자</li>
+      </ul>
+    </div>
+
+    <!-- 단독신청 -->
+    <div class="sec-title" style="margin-top:4px">단독신청</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">판결에 의한 등기: <span class="k">승소한</span> 등기권리자 <span class="o">또는</span> 등기의무자</li>
+        <li class="kp-item">공유물분할판결: 등기권리자 <span class="o">또는</span> 등기의무자</li>
+        <li class="kp-item">승소 등기권리자 → 등기필정보 등기소에 <span class="x">제공 필요 없다</span></li>
+        <li class="kp-item">승소 등기의무자 → 등기필정보 등기소에 <span class="o">제공해야 한다</span></li>
+        <li class="kp-item">이행판결 → 확정시기 <span class="k">언제인가에 관계없이</span> 신청 가능</li>
+        <li class="kp-item">판결 등기 신청 시 <span class="r">확정증명서</span> 반드시 첨부</li>
+        <li class="kp-item">말소등기: 사망·소재불명(제권판결)·혼동</li>
+        <li class="kp-item">상속·신탁·변경등기(부동산변경, 등기명의인표시변경)</li>
+        <li class="kp-item">멸실등기: 멸실 → <span class="k">1개월</span> 이내 / 존재하지 않는 건물 → <span class="k">지체 없이</span></li>
+      </ul>
+    </div>
+
+    <!-- 가등기 -->
+    <div class="sec-title" style="margin-top:4px">가등기 단독신청</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">가등기권리자 단독 → <span class="k">가등기의무자의 승낙서</span> 또는 <span class="k">법원의 가처분명령</span></li>
+        <li class="kp-item">가등기의인 단독 → <span class="k">인감증명</span></li>
+        <li class="kp-item">가등기의무자 또는 이해관계 제3자 단독 → <span class="k">가등기명의인의 승낙서</span></li>
+      </ul>
+    </div>
+
+    <!-- 대위신청 -->
+    <div class="sec-title" style="margin-top:4px">대위신청 핵심</div>
+    <div class="hl-box yellow">
+      <div class="hl-title">⭐ 포괄승계인 대위</div>
+      매도인 甲이 사망 → 丙이 상속 → <strong>甲에서 乙로 직접 소유권이전등기</strong> (상속등기 불필요)
+    </div>
+    <div class="hl-box blue">
+      <div class="hl-title">채권자 대위 주의사항</div>
+      채권자가 대위신청 → <strong>채권자 및 채무자에게 등기완료통지</strong><br>
+      상속포기 기간 내에도 <strong>채권자는 대위 가능</strong> (×아님, ○임!)
+    </div>
+    <div class="hl-box red">
+      <div class="hl-title">신탁등기 대위</div>
+      수익자·위탁자 → 수탁자를 대위하여 신탁등기 신청 가능<br>
+      단, 이 경우 <strong>1건의 신청정보로 일괄신청 불가</strong>
+    </div>
+
+    <!-- 합유등기 -->
+    <div class="sec-title" style="margin-top:4px">합유등기 특칙</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">합유등기 시 신청정보에 <span class="x">합유자의 지분비율 기록 안 함</span></li>
+        <li class="kp-item">합유자 중 1인이 사망 → 잔존 합유자가 <span class="k">합유명의인변경등기</span></li>
+        <li class="kp-item">합유지분에 대한 <span class="x">가압류(가처분)등기 불가</span></li>
+        <li class="kp-item">합유자 처분 시 → <span class="x">지분이전등기 신청 불가</span> (합유명의인변경등기)</li>
+      </ul>
+    </div>
+
+    <!-- 이해관계 제3자 -->
+    <div class="sec-title" style="margin-top:4px">등기상 이해관계 있는 제3자</div>
+    <div class="card">
+      <table class="cmp-table">
+        <thead><tr><th>등기 종류</th><th>승낙정보 방식</th></tr></thead>
+        <tbody>
+          <tr><td>변경등기 — 제3자 있을 때</td><td class="cb">부기등기 (승낙정보 첨부)</td></tr>
+          <tr><td>변경등기 — 제3자 없을 때</td><td>주등기</td></tr>
+          <tr><td>경정·말소·말소회복등기</td><td class="cy">승낙정보 등기소에 제공 ○</td></tr>
+          <tr><td>변경등기 — 제3자 있을 때 (제공여부)</td><td class="cn">제공 의무 없음 ×</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div><!-- /page1 -->
+
+<!-- ===== PAGE 2: 소유권보존·이전 ===== -->
+<div class="page" id="page2">
+  <div class="page-header">
+    <span class="badge">부동산등기법</span>
+    <h1>소유권보존·이전 🏠</h1>
+    <p>유증·상속·신탁·수용 완전 정복</p>
+  </div>
+
+  <div style="padding:16px 16px 0">
+
+    <!-- 소유권보존등기 신청 자격 -->
+    <div class="sec-title">소유권보존등기 신청할 수 있는 자</div>
+    <div class="card">
+      <table class="cmp-table">
+        <thead><tr><th>신청 자격</th><th>가능?</th></tr></thead>
+        <tbody>
+          <tr><td>대장에 최초 소유자로 등록된 자</td><td class="cy">O</td></tr>
+          <tr><td>대장 최초 소유자로부터 이전등록 받은 자</td><td class="cn">X</td></tr>
+          <tr><td>토지 지적공부에 '국'으로부터 이전등록 받은 자</td><td class="cy">O</td></tr>
+          <tr><td>상속인</td><td class="cy">O</td></tr>
+          <tr><td>포괄적 유증을 받은 자</td><td class="cy">O</td></tr>
+          <tr><td>특정적 유증을 받은 자</td><td class="cn">X (상속인 명의 보존 후 이전)</td></tr>
+          <tr><td>수용으로 소유권 취득을 증명하는 자</td><td class="cy">O (미등기 토지)</td></tr>
+          <tr><td>시장·군수·구청장 확인 → 건물 보존등기</td><td class="cy">O (건물만)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="hl-box red">
+      <div class="hl-title">⚠️ 중요 구별</div>
+      토지대장 소유자 특정 불가 → <strong>국가</strong>를 상대로 판결<br>
+      건축물대장 소유자 특정 불가 → <strong>시장·군수·구청장</strong>을 상대로 판결
+    </div>
+
+    <!-- 소유권보존등기 시 등기필정보 -->
+    <div class="hl-box blue">
+      <div class="hl-title">💡 소유권보존등기 = 등기필정보 제공 불필요</div>
+      단독신청이므로 등기의무자 없음 → 등기필정보 제공 × <br>
+      등기원인, 연월일도 제공 불필요
+    </div>
+
+    <!-- 등기필정보 작성·통지 X 경우 -->
+    <div class="sec-title" style="margin-top:4px">등기필정보 작성·통지 안 하는 경우</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">❶ 등기관이 <span class="k">직권으로</span> 소유권보존등기를 한 경우</li>
+        <li class="kp-item">❷ <span class="k">채권자</span>가 등기권리자를 대위하여 신청한 경우</li>
+        <li class="kp-item">❸ 승소한 <span class="k">등기의무자</span>가 등기권리자 명의로 신청한 경우</li>
+        <li class="kp-item">❹ 공유자 일부가 공유 전원을 등기권리자로 등기 신청한 경우 (<span class="r">신청인 아닌 등기명의인에 한정</span>)</li>
+        <li class="kp-item">촉탁 경우: <span class="k">국가·지방자치단체</span>가 등기권리자인 경우</li>
+      </ul>
+    </div>
+
+    <!-- 유증 -->
+    <div class="sec-title" style="margin-top:4px">소유권이전등기(유증)</div>
+    <div class="hl-box yellow">
+      <div class="hl-title">⭐ 핵심 3가지</div>
+      ① 유증 → <strong>상속등기 거치지 않고</strong> 유증자로부터 수증자 명의로 직접 신청<br>
+      ② 등기원인일자 → <strong>유증자가 사망한 날</strong> (조건부 → 조건 성취 날, 기한부 → 기한 도래 날)<br>
+      ③ 유증이 유류분 침해하더라도 → <strong>등기관은 수리해야</strong>
+    </div>
+    <div class="card">
+      <div class="card-title">포괄유증 vs 특정유증 (미등기부동산)</div>
+      <ul class="kp-list">
+        <li class="kp-item"><span class="o">포괄유증</span>을 받은 자 → 자신 명의로 직접 <span class="k">소유권보존등기</span> 신청 가능</li>
+        <li class="kp-item"><span class="r">특정유증</span>을 받은 자 → <span class="b">상속인·유언집행자 명의 보존등기 후</span> → 소유권이전등기</li>
+      </ul>
+    </div>
+
+    <!-- 상속 -->
+    <div class="sec-title" style="margin-top:4px">소유권이전등기(상속)</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">상속등기: 상속인이 <span class="k">단독</span>으로 신청</li>
+        <li class="kp-item">상속포기 가능한 기간 내에도 <span class="o">채권자는 대위 신청 가능</span></li>
+        <li class="kp-item">공동상속인 중 1인 → <span class="x">자기 지분만으로 소유권이전등기 불가</span></li>
+        <li class="kp-item">공동상속인 중 1인 → <span class="o">전원 명의의 소유권이전등기 신청 가능</span></li>
+        <li class="kp-item">상속등기 경료 전의 협의분할 → 등기원인일자: <span class="k">사망일</span></li>
+        <li class="kp-item">상속등기 경료 후의 협의분할 → <span class="k">소유권경정등기</span></li>
+        <li class="kp-item">첨부정보: <span class="k">상속재산분할협의서</span> + <span class="k">상속인 전원의 인감증명</span></li>
+        <li class="kp-item"><span class="x">토지거래허가정보, 농지취득자격증명</span> 제공 불필요</li>
+      </ul>
+    </div>
+
+    <!-- 수용 -->
+    <div class="sec-title" style="margin-top:4px">소유권이전등기(수용)</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">등기원인: <span class="k">토지수용</span> / 연월일: <span class="k">수용개시일</span></li>
+        <li class="kp-item"><span class="k">보상·공탁 증명정보</span> 첨부 필요</li>
+        <li class="kp-item">수용 후 직권말소 <span class="x">불가</span>: ❶지역권 ❷토지수용위원회 재결로 존속 인정된 권리 ❸수용개시일 이전 소유권이전등기 ❹수용개시일 이후 상속등기</li>
+        <li class="kp-item">수용 후 직권말소 <span class="o">가능</span>: 처분제한등기 (가압류·가처분·압류)</li>
+      </ul>
+    </div>
+
+    <!-- 신탁 -->
+    <div class="sec-title" style="margin-top:4px">소유권이전등기(신탁)</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">신탁등기: 수탁자가 <span class="k">단독</span> 신청·말소</li>
+        <li class="kp-item">권리 이전·보존·설정등기 + 신탁등기 → <span class="k">1건의 신청정보로 일괄신청</span></li>
+        <li class="kp-item">수탁자 여럿 → 신탁재산은 <span class="k">합유</span> (공유 X)</li>
+        <li class="kp-item">신탁의 일부 종료 → 권리이전등기 + 신탁 <span class="k">변경</span>등기 → 동일 순위번호</li>
+        <li class="kp-item">신탁재산 처분 → 권리이전등기 + 신탁 <span class="k">변경</span>등기 → 동일 순위번호</li>
+        <li class="kp-item">신탁재산 고유재산이 됨 → 뜻의 등기 <span class="k">주등기</span> (부기등기 X)</li>
+      </ul>
+    </div>
+
+  </div>
+</div><!-- /page2 -->
+
+<!-- ===== PAGE 3: 직권등기·가등기 ===== -->
+<div class="page" id="page3">
+  <div class="page-header">
+    <span class="badge">부동산등기법</span>
+    <h1>직권등기 · 가등기 ⚡</h1>
+    <p>직권말소 범위 + 가등기 본등기 후 직권말소</p>
+  </div>
+
+  <div style="padding:16px 16px 0">
+
+    <!-- 직권등기 -->
+    <div class="sec-title">직권으로 하는 주요 등기</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">미등기부동산 법원 촉탁 → <span class="k">직권으로 소유권보존등기</span></li>
+        <li class="kp-item">환매권 행사 → 소유권이전등기 시 <span class="k">환매특약등기 직권말소</span></li>
+        <li class="kp-item">공용부분 소유권보존등기 → <span class="k">공용부분이라는 뜻의 등기 직권말소</span></li>
+        <li class="kp-item">소유권이전등기 신청 시 등기의무자 주소 불일치 → <span class="k">직권으로 등기명의인표시변경등기</span></li>
+        <li class="kp-item">말소등기 시 이해관계 제3자 승낙 있을 경우 → <span class="k">제3자 명의 등기 직권말소</span></li>
+      </ul>
+    </div>
+
+    <!-- 가등기 본등기 후 직권말소 -->
+    <div class="sec-title" style="margin-top:4px">가등기 → 본등기 후 직권말소 범위</div>
+
+    <div class="hl-box green">
+      <div class="hl-title">소유권이전청구권보전 가등기 → 소유권이전 본등기</div>
+      <strong>직권말소 O:</strong> 소유권, 저당권, 용익권, 처분제한한등기<br>
+      <strong>직권말소 X:</strong> 주택임차권 (대항력 있는 것), 가처분(가등기상 권리 목적)
+    </div>
+
+    <div class="hl-box blue">
+      <div class="hl-title">용익권설정청구권 가등기 → 용익권설정 본등기</div>
+      <strong>직권말소 O:</strong> 용익권등기<br>
+      <strong>직권말소 X:</strong> 저당권, 소유권이전, 처분제한등기
+    </div>
+
+    <div class="hl-box yellow">
+      <div class="hl-title">저당권설정청구권 가등기 → 저당권설정 본등기</div>
+      <strong>직권말소 O:</strong> 저당권등기<br>
+      <strong>직권말소 X:</strong> 소유권이전, 처분제한등기, 용익권
+    </div>
+
+    <!-- 등기 각하 사유 -->
+    <div class="sec-title" style="margin-top:4px">등기 각하 사유 (법 제29조 제2호)</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">공유지분 → <span class="o">소유권이전 O / 저당권설정 O</span> / <span class="x">소유권보존 X / 용익권설정 X</span></li>
+        <li class="kp-item">부동산 일부 → <span class="o">용익권설정 O</span> / <span class="x">소유권보존 X / 소유권이전 X / 저당권설정 X</span></li>
+        <li class="kp-item">점유권·유치권·분묘기지권·주위토지통행권·물적청구권 → <span class="x">등기 불가</span></li>
+        <li class="kp-item">농지에 대한 전세권 → <span class="x">등기 불가</span></li>
+        <li class="kp-item">하천에 대한 용익권 → <span class="x">등기 불가</span></li>
+        <li class="kp-item">자기 지분만의 상속등기 → <span class="x">각하</span></li>
+        <li class="kp-item">이미 보존등기된 부동산에 다시 보존등기 → <span class="x">각하</span></li>
+      </ul>
+    </div>
+
+    <!-- 근저당권 설정등기 특칙 -->
+    <div class="sec-title" style="margin-top:4px">근저당권 등기 특칙</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">채권자 여럿이어도 <span class="k">채권최고액 단일하게</span> 기록 (채권자별 구분 불가)</li>
+        <li class="kp-item"><span class="k">5개 이상</span> 부동산에 저당권설정 → <span class="k">공동담보목록</span> 작성</li>
+        <li class="kp-item">환매특약등기 필요적 기록사항: <span class="k">매매대금</span> + <span class="k">매매비용</span></li>
+      </ul>
+    </div>
+
+  </div>
+</div><!-- /page3 -->
+
+<!-- ===== PAGE 4: 지적법 ===== -->
+<div class="page" id="page4">
+  <div class="page-header">
+    <span class="badge">공간정보관리법</span>
+    <h1>지적법 핵심 정리 🗺</h1>
+    <p>토지이동 기간 · 지번 · 축척변경 완전 정복</p>
+  </div>
+
+  <div style="padding:16px 16px 0">
+
+    <!-- 토지이동 신청기간 -->
+    <div class="sec-title">토지이동 신청기간</div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-day">60일</div>
+        <div class="tl-content"><strong>신규등록·등록전환·분할·합병·지목변경</strong><br>단, 분할 중 소유권이전·매매 목적, 불합리한 지상경계 시정 → <span style="color:#fbbf24">신청의무 없음</span></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-day red">90일</div>
+        <div class="tl-content"><strong>바다로 된 토지의 등록말소</strong></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-day green">15일</div>
+        <div class="tl-content">도시개발사업 착수·변경·완료 신고</div>
+      </div>
+    </div>
+
+    <!-- 지번 핵심 -->
+    <div class="sec-title" style="margin-top:16px">지번 부여 핵심</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">지번 부여: <span class="k">지번부여지역</span>별로 차례대로 / <span class="k">북서→남동</span> 순</li>
+        <li class="kp-item">지번 변경 필요 시 → <span class="k">시·도지사 또는 대도시시장의 승인</span></li>
+        <li class="kp-item">분할: 1필지는 <span class="k">분할 전 지번</span>, 나머지는 최종 부번 다음 순서 부번</li>
+        <li class="kp-item">건축물 있는 필지 → 분할 전 지번 <span class="k">우선</span> 부여</li>
+        <li class="kp-item">합병: 선 순위 지번 → 다만 <span class="k">본번으로 된 지번 있으면 그 본번 중 선순위</span></li>
+        <li class="kp-item">시·도지사 승인 필요: ❶지번 변경 ❷지적공부 반출 ❸축척 변경</li>
+      </ul>
+    </div>
+
+    <!-- 지목 핵심 28개 -->
+    <div class="sec-title" style="margin-top:4px">지목 혼동 주의</div>
+    <div class="card">
+      <table class="cmp-table">
+        <thead><tr><th>지목</th><th>핵심 구별</th></tr></thead>
+        <tbody>
+          <tr><td>전(田)</td><td>물 이용 <span class="cn">X</span>, 재배</td></tr>
+          <tr><td>답(畓)</td><td>물 이용 <span class="cy">O</span>, 재배</td></tr>
+          <tr><td>유지</td><td>배수 <span class="cn">X</span>, 자생</td></tr>
+          <tr><td>하천</td><td>자연의 유수</td></tr>
+          <tr><td>구거</td><td>자연유수 + 소규모 인공적 수로</td></tr>
+          <tr><td>주차장</td><td>노상주차장, 부설주차장 <span class="cn">X</span></td></tr>
+          <tr><td>도로</td><td>2필지 이상 진입 통로 O / 아파트·공장 안의 통로 <span class="cn">X</span></td></tr>
+          <tr><td>묘지</td><td>묘공원, 묘지관리용 건물 부지 → <span class="cw">대</span></td></tr>
+          <tr><td>체육용지</td><td>영속성 미흡, 골프연습장 <span class="cn">X</span></td></tr>
+          <tr><td>유원지</td><td>아영장</td></tr>
+          <tr><td>사적지</td><td>학교·공원·종교용지 <span class="cn">X</span></td></tr>
+          <tr><td>잡종지</td><td>자동차·함만·공항·쓰레기·오물처리장</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 축척변경 기간 총정리 -->
+    <div class="sec-title" style="margin-top:4px">축척변경 기간 총정리</div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-day green">20일</div>
+        <div class="tl-content">승인 받은 후 <strong>공고</strong></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-day">30일</div>
+        <div class="tl-content">시행공고일로부터 토지소유자·점유자가 <strong>경계점표지 설치</strong></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-day yellow">15일</div>
+        <div class="tl-content">청산금 결정 공고 (일반인 열람)</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-day green">20일</div>
+        <div class="tl-content">청산금 결정 공고 후 → <strong>납부고지 또는 수령통지</strong></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-day purple">6개월</div>
+        <div class="tl-content">납부고지를 받은 자 → <strong>청산금 납부</strong> / 지적소관청 → <strong>청산금 지급</strong></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-day red">1개월</div>
+        <div class="tl-content">이의가 있는 자 → <strong>이의신청</strong><br>이의신청 받은 지적소관청 → 축척변경위원회 심의·의결</div>
+      </div>
+    </div>
+
+    <!-- 중앙지적위원회 vs 축척변경위원회 -->
+    <div class="sec-title" style="margin-top:16px">중앙지적위원회 vs 축척변경위원회</div>
+    <div class="card">
+      <table class="cmp-table">
+        <thead><tr><th>항목</th><th>중앙지적위원회</th><th>축척변경위원회</th></tr></thead>
+        <tbody>
+          <tr><td>구성</td><td class="cb">5명 이상 10명 이하</td><td class="cb">5명 이상 10명 이하</td></tr>
+          <tr><td>토지소유자 비율</td><td>—</td><td class="cw">2분의 1 이상</td></tr>
+          <tr><td>소유자 5명 이하 시</td><td>—</td><td class="cw">전원 위촉</td></tr>
+          <tr><td>회의 통지</td><td class="cy">5일 전까지 서면</td><td class="cy">5일 전까지 서면</td></tr>
+          <tr><td>개의·의결</td><td>재직원 과반수 출석, 출석 과반수 찬성</td><td>재직원 과반수 출석, 출석 과반수 찬성</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 지적측량 기간 -->
+    <div class="sec-title" style="margin-top:4px">지적측량 기간</div>
+    <div class="card">
+      <ul class="kp-list">
+        <li class="kp-item">측량기간 <span class="k">5일</span> / 측량검사기간 <span class="k">4일</span></li>
+        <li class="kp-item">지적기준점 15점 이하 → 측량기간 <span class="k">4일</span> 추가</li>
+        <li class="kp-item">15점 초과 → 4일 + (15점 초과 4점마다 <span class="k">1일</span>)</li>
+        <li class="kp-item">당사자 합의 시 → 전체 기간의 <span class="k">4분의 3</span>은 측량, <span class="k">4분의 1</span>은 검사</li>
+      </ul>
+    </div>
+
+    <!-- 지적정리 통지기간 -->
+    <div class="sec-title" style="margin-top:4px">지적정리 통지기간</div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-day yellow">15일</div>
+        <div class="tl-content">토지이동으로 <strong>변경등기 필요한 경우</strong> → 등기완료통지서 접수한 날부터</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-day green">7일</div>
+        <div class="tl-content">토지이동으로 <strong>변경등기 불필요한 경우</strong> → 지적공부 등록한 날부터</div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /page4 -->
+
+<!-- ===== PAGE 5: OX 퀴즈 ===== -->
+<div class="page" id="page5">
+  <div class="page-header">
+    <span class="badge">기출 OX 퀴즈</span>
+    <h1>헷갈리는 OX 🧠</h1>
+    <p>틀리기 쉬운 기출 핵심 지문</p>
+  </div>
+
+  <div style="padding:16px 16px 0">
+
+    <div class="quiz-block">
+      <div class="quiz-meta">등기신청</div>
+      <div class="quiz-q">상속포기를 할 수 있는 기간 내에는 상속인의 채권자가 대위권을 행사하여 상속등기를 신청할 수 없다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">X</button>
+      </div>
+      <div class="quiz-answer">❌ X → 상속포기 기간 내에도 채권자는 대위하여 상속등기 신청 가능!</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">등기신청</div>
+      <div class="quiz-q">합유등기를 하는 경우, 신청정보에 합유자의 지분비율을 기록한다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">X</button>
+      </div>
+      <div class="quiz-answer">❌ X → 합유등기 시 합유자의 지분비율은 기록하지 않는다.</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">단독신청</div>
+      <div class="quiz-q">이행판결에 의한 등기는 확정시기가 언제인가에 관계없이 등기를 신청할 수 있다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">X</button>
+      </div>
+      <div class="quiz-answer">✅ O → 이행판결은 확정시기 무관하게 신청 가능!</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">유증등기</div>
+      <div class="quiz-q">유증으로 인한 소유권이전등기는 상속등기를 거쳐 수증자 명의로 이전등기를 신청하여야 한다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">X</button>
+      </div>
+      <div class="quiz-answer">❌ X → 상속등기 거치지 않고 유증자로부터 직접 수증자 명의로 신청!</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">유증등기</div>
+      <div class="quiz-q">유증으로 인한 소유권이전등기 신청이 상속인의 유류분을 침해하는 내용인 경우 등기관은 이를 수리할 수 없다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">X</button>
+      </div>
+      <div class="quiz-answer">❌ X → 유류분 침해 여부와 무관하게 등기관은 수리해야!</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">소유권보존등기</div>
+      <div class="quiz-q">특별자치도지사·군수 또는 자치구 구청장의 확인에 의해 자기의 소유권을 증명하여 토지에 대한 소유권보존등기를 신청할 수 있다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">X</button>
+      </div>
+      <div class="quiz-answer">❌ X → 시장·군수·구청장 확인은 건물 보존등기만 가능! 토지는 불가.</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">수용등기</div>
+      <div class="quiz-q">수용에 의한 소유권이전등기를 할 경우, 그 부동산을 위해 존재하는 지역권등기는 직권으로 말소할 수 없다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">X</button>
+      </div>
+      <div class="quiz-answer">✅ O → 수용 후 지역권 직권말소 불가! (처분제한등기는 말소 가능)</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">신탁등기</div>
+      <div class="quiz-q">수탁자가 여러 명인 경우 등기관은 공유인 뜻을 등기기록에 기록하여야 한다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">X</button>
+      </div>
+      <div class="quiz-answer">❌ X → 수탁자 여럿이면 합유 (공유 아님)!</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">토지이동</div>
+      <div class="quiz-q">바다로 된 토지의 등록말소 신청기간은 60일 이내이다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">X</button>
+      </div>
+      <div class="quiz-answer">❌ X → 바다로 된 토지 등록말소 = <strong>90일</strong>!</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">축척변경</div>
+      <div class="quiz-q">납부고지를 받은 자는 납부고지를 받은 날부터 6개월 이내에 청산금을 지적소관청에 내야 한다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">X</button>
+      </div>
+      <div class="quiz-answer">✅ O → 납부고지 받은 날부터 6개월 이내!</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">지번</div>
+      <div class="quiz-q">지번은 지번부여지역별로 북서에서 남동 방향으로 순차적으로 부여한다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">X</button>
+      </div>
+      <div class="quiz-answer">✅ O → 북서 → 남동 방향으로 순차 부여!</div>
+    </div>
+
+    <div class="quiz-block">
+      <div class="quiz-meta">직권등기</div>
+      <div class="quiz-q">등기관이 미등기 부동산에 관하여 과세관청의 촉탁에 따라 체납처분으로 인한 압류등기를 하기 위해서는 직권으로 소유권보존등기를 하여야 한다.</div>
+      <div class="quiz-btns">
+        <button class="ox-btn" onclick="oxAnswer(this,'X')">O</button>
+        <button class="ox-btn" onclick="oxAnswer(this,'correct')">X</button>
+      </div>
+      <div class="quiz-answer">❌ X → 과세관청 촉탁 체납처분 → 직권 소유권보존등기 하지 않는다! (법원 촉탁만 가능)</div>
+    </div>
+
+  </div>
+</div><!-- /page5 -->
+
+</main>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav1" onclick="showPage(1)">
+    <span class="nav-icon">📋</span>등기신청
+  </button>
+  <button class="nav-btn" id="nav2" onclick="showPage(2)">
+    <span class="nav-icon">🏠</span>소유권
+  </button>
+  <button class="nav-btn" id="nav3" onclick="showPage(3)">
+    <span class="nav-icon">⚡</span>직권
+  </button>
+  <button class="nav-btn" id="nav4" onclick="showPage(4)">
+    <span class="nav-icon">🗺</span>지적법
+  </button>
+  <button class="nav-btn" id="nav5" onclick="showPage(5)">
+    <span class="nav-icon">🧠</span>OX퀴즈
+  </button>
+</nav>
+
+<script>
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+var currentTheme = lsGet('viz-theme') || 'dark';
+document.documentElement.className = 'theme-' + currentTheme;
+
+function toggleTheme(){
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.className = 'theme-' + currentTheme;
+  lsSet('viz-theme', currentTheme);
+  closeMenu();
+}
+
+function toggleMenu(){
+  document.getElementById('vizMenu').classList.toggle('open');
+}
+function closeMenu(){
+  document.getElementById('vizMenu').classList.remove('open');
+}
+document.addEventListener('click', function(e){
+  var m = document.querySelector('.viz-menu');
+  if(m && !m.contains(e.target)) closeMenu();
+});
+
+function showPage(n){
+  for(var i=1;i<=5;i++){
+    var p = document.getElementById('page'+i);
+    var b = document.getElementById('nav'+i);
+    if(p) p.classList.remove('active');
+    if(b) b.classList.remove('active');
+  }
+  var tp = document.getElementById('page'+n);
+  var tb = document.getElementById('nav'+n);
+  if(tp){ tp.classList.add('active'); tp.classList.remove('fade-in'); void tp.offsetWidth; tp.classList.add('fade-in'); }
+  if(tb) tb.classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function oxAnswer(btn, result){
+  var block = btn.closest('.quiz-block');
+  var btns = block.querySelectorAll('.ox-btn');
+  var ans = block.querySelector('.quiz-answer');
+  btns.forEach(function(b){ b.disabled=true; });
+  if(result === 'correct'){
+    btn.classList.add('correct');
+    ans.className = 'quiz-answer show correct-a';
+  } else {
+    btn.classList.add('wrong');
+    ans.className = 'quiz-answer show wrong-a';
+  }
+  // highlight correct button
+  btns.forEach(function(b){
+    if(!b.disabled){ b.classList.add('reveal'); }
+  });
+}
+
+window.addEventListener('load', function(){
+  setTimeout(function(){
+    document.querySelectorAll('.fade-in').forEach(function(el){ el.style.opacity='1'; });
+  }, 500);
+});
+</script>
+</body>
+</html>
