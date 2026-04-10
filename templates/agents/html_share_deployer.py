@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 외부 공유용 HTML 배포 모듈.
-HTML 파일을 GitHub Pages(html-share 레포)에 올려서 단축 URL을 반환한다.
+Netlify CLI로 HTML 파일을 배포하고 단축 URL을 반환한다.
 
 어디서든 동일하게 사용:
 - 터미널 Claude Code: from html_share_deployer import deploy
@@ -9,10 +9,10 @@ HTML 파일을 GitHub Pages(html-share 레포)에 올려서 단축 URL을 반환
 - 스크립트: python3 html_share_deployer.py "파일.html"
 
 === 외부 공유 규칙 (필수) ===
-1. 도메인: github.io (GitHub Pages) — cdn.jsdelivr.net 절대 사용 금지
-2. 파일명: 영문 슬러그만 (한글 파일명 → 자동 변환)
+1. 배포: Netlify CLI (alice-share.netlify.app)
+2. 파일명: 영문 슬러그 (한글 → 자동 변환)
 3. 단축 URL: is.gd로 단축 후 반환
-4. 결과: https://is.gd/xxxxx (짧은 URL)
+4. cdn.jsdelivr.net / github.com blob URL 절대 사용 금지
 =============================
 """
 import os
@@ -21,11 +21,12 @@ import re
 import shutil
 import subprocess
 import unicodedata
+import tempfile
 from pathlib import Path
 
 
-REPO_DIR = Path.home() / "html-share"
-PAGES_BASE = "https://alice840126-ship-it.github.io/html-share"
+NETLIFY_SITE_ID = "9d8e40ce-a066-40ed-86c4-a7220f481a23"
+NETLIFY_BASE = "https://alice-share.netlify.app"
 
 
 def to_english_slug(filename: str) -> str:
@@ -55,73 +56,58 @@ def to_english_slug(filename: str) -> str:
         slug = f"{date_part}-{rest}" if date_part else rest
     else:
         slug = date_part if date_part else "post"
-    return slug + ".html"
+    return slug
 
 
 def deploy(html_path: str) -> dict:
-    """HTML 파일을 html-share 레포에 배포하고 단축 URL 반환.
+    """HTML 파일을 Netlify에 배포하고 단축 URL 반환.
 
     Args:
         html_path: 배포할 HTML 파일 경로
 
     Returns:
-        {"short_url": "https://is.gd/xxx", "pages_url": "https://...github.io/...", "slug": "파일명.html", "ok": True}
+        {"short_url": "https://is.gd/xxx", "site_url": "https://alice-share.netlify.app", "slug": "파일명", "ok": True}
         실패 시 {"ok": False, "error": "메시지"}
     """
-    if not REPO_DIR.exists():
-        return {"ok": False, "error": "~/html-share 폴더 없음"}
-
     html_file = Path(html_path)
     if not html_file.exists():
         return {"ok": False, "error": f"파일 없음: {html_path}"}
 
     slug = to_english_slug(html_file.name)
-    dest = REPO_DIR / slug
 
-    # 1. 복사
-    shutil.copy2(str(html_file), str(dest))
+    # 임시 폴더에 index.html로 복사 (Netlify는 index.html을 루트로 서빙)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        shutil.copy2(str(html_file), os.path.join(tmp_dir, "index.html"))
 
-    # 2. git add + commit
-    commit_result = subprocess.run(
-        f'cd "{REPO_DIR}" && git pull --rebase 2>/dev/null; '
-        f'git add "{slug}" && '
-        f'(git diff --cached --quiet && echo "NOTHING_NEW" || git commit -m "add {slug}")',
-        shell=True, capture_output=True, text=True,
-    )
-    already = "NOTHING_NEW" in commit_result.stdout or "nothing to commit" in commit_result.stdout
-    if commit_result.returncode != 0 and not already:
-        return {"ok": False, "error": f"git commit 실패: {commit_result.stderr.strip()[:100]}"}
-
-    # 3. git push (2회 시도)
-    for attempt in range(2):
-        push = subprocess.run(
-            f'cd "{REPO_DIR}" && git push',
-            shell=True, capture_output=True, text=True,
+        # Netlify CLI로 배포
+        result = subprocess.run(
+            ["netlify", "deploy", f"--dir={tmp_dir}", "--prod",
+             f"--site={NETLIFY_SITE_ID}"],
+            capture_output=True, text=True, timeout=60,
         )
-        if push.returncode == 0:
-            break
-        if attempt == 1:
-            return {"ok": False, "error": f"git push 실패: {push.stderr.strip()[:100]}"}
 
-    # 4. GitHub Pages URL
-    pages_url = f"{PAGES_BASE}/{slug}"
+        if result.returncode != 0:
+            return {"ok": False, "error": f"Netlify 배포 실패: {result.stderr.strip()[:200]}"}
 
-    # 5. is.gd 단축
+    # 사이트 URL
+    site_url = NETLIFY_BASE
+
+    # is.gd 단축
     try:
         short = subprocess.run(
-            ["curl", "-s", f"https://is.gd/create.php?format=simple&url={pages_url}"],
+            ["curl", "-s", f"https://is.gd/create.php?format=simple&url={site_url}"],
             capture_output=True, text=True, timeout=10,
         )
         short_url = short.stdout.strip()
         if not short_url.startswith("http"):
-            short_url = pages_url  # 단축 실패 시 원본 사용
+            short_url = site_url
     except Exception:
-        short_url = pages_url
+        short_url = site_url
 
     return {
         "ok": True,
         "short_url": short_url,
-        "pages_url": pages_url,
+        "site_url": site_url,
         "slug": slug,
     }
 
@@ -135,7 +121,7 @@ if __name__ == "__main__":
     if result["ok"]:
         print(f"배포 완료!")
         print(f"  단축 URL: {result['short_url']}")
-        print(f"  Pages URL: {result['pages_url']}")
+        print(f"  사이트 URL: {result['site_url']}")
         print(f"  파일명: {result['slug']}")
     else:
         print(f"실패: {result['error']}")
