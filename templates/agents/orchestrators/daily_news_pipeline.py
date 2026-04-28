@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from news_scraper import NewsScraper
-from news_analyzer_v2 import NewsAnalyzer
+from news_analyzer import NewsAnalyzer
 from summarizer import Summarizer
 from telegram_sender import TelegramSender
 
@@ -167,7 +167,7 @@ class DailyNewsPipeline:
         """
         self.config = config or {}
 
-        # 에이전트 조립
+        # 에이전트 조립 (observe=True → pipeline_observer JSONL 자동 기록)
         self.pipeline = PipelineAgent(
             name="daily_news_pipeline",
             agents=[
@@ -175,7 +175,9 @@ class DailyNewsPipeline:
                 AnalyzerAgent(config),    # 2. 뉴스 분석
                 SummarizerAgent(),        # 3. 요약
             ],
-            stop_on_error=False
+            stop_on_error=False,
+            observe=True,
+            observe_keyword_key="query",
         )
 
         # 텔레그램 발송 에이전트 (별도)

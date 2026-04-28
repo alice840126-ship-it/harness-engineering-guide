@@ -33,29 +33,46 @@ except ImportError:
     REQUESTS_AVAILABLE = False
 
 
+def _wrap_if_needed(text: str, shield: bool, source: Optional[str]) -> str:
+    """shield=True일 때만 injection_shield.wrap_external로 감싸기 (실패 시 원본 반환)"""
+    if not shield:
+        return text
+    try:
+        import sys as _sys
+        _sys.path.insert(0, "/Users/oungsooryu/alice-github/harness-engineering-guide/templates/agents")
+        from injection_shield import wrap_external
+        return wrap_external(text, source=source or "web")
+    except Exception:
+        return text
+
+
 class WebDataScraper:
     """범용 웹 데이터 수집기 — Playwright headless + requests fallback"""
 
     def __init__(self, timeout: int = 30000):
         self.timeout = timeout
 
-    def scrape(self, url: str, wait_selector: Optional[str] = None, extract_tables: bool = False) -> str:
+    def scrape(self, url: str, wait_selector: Optional[str] = None, extract_tables: bool = False,
+               shield: bool = False, shield_source: Optional[str] = None) -> str:
         """URL 렌더링 후 텍스트 추출 (동적 사이트 포함)
 
         Args:
             url: 크롤링할 URL
             wait_selector: 특정 요소가 나타날 때까지 대기 (CSS selector)
             extract_tables: True면 <table> 요소만 추출
+            shield: True면 반환 전에 injection_shield.wrap_external로 외부 데이터 격리
+            shield_source: shield 래핑 시 source 라벨 (미지정 시 url)
 
         Returns:
             렌더링된 페이지의 텍스트 내용
         """
         if PLAYWRIGHT_AVAILABLE:
-            return self._scrape_with_playwright(url, wait_selector, extract_tables)
+            text = self._scrape_with_playwright(url, wait_selector, extract_tables)
         elif REQUESTS_AVAILABLE:
-            return self._scrape_with_requests(url)
+            text = self._scrape_with_requests(url)
         else:
-            return "ERROR: playwright, requests 모두 미설치"
+            text = "ERROR: playwright, requests 모두 미설치"
+        return _wrap_if_needed(text, shield, shield_source or url)
 
     def _scrape_with_playwright(self, url: str, wait_selector: Optional[str] = None, extract_tables: bool = False) -> str:
         """Playwright headless로 동적 사이트 크롤링"""
@@ -139,10 +156,13 @@ if __name__ == "__main__":
                         help="페이지 로딩 타임아웃 ms (default: 30000)")
     parser.add_argument("--raw", action="store_true",
                         help="리포트 포맷 없이 원시 텍스트만 출력")
+    parser.add_argument("--shield", action="store_true",
+                        help="injection_shield.wrap_external로 외부 데이터 격리 래핑")
 
     args = parser.parse_args()
     scraper = WebDataScraper(timeout=args.timeout)
-    raw = scraper.scrape(args.url, wait_selector=args.wait, extract_tables=args.table)
+    raw = scraper.scrape(args.url, wait_selector=args.wait, extract_tables=args.table,
+                         shield=args.shield)
 
     if args.raw:
         print(raw)

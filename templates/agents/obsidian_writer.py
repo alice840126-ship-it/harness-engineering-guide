@@ -4,25 +4,132 @@
 
 옵시디언 Vault에 마크다운 노트를 저장하는 재사용 가능한 에이전트
 - 단일 책임: 옵시디언 노트 저장만 담당 (분석, 발송은 다른 에이전트)
+
+표준 YAML (5개 필드 — 모든 에이전트가 build_yaml()로만 생성):
+    type / author / date created / date modified / tags
 """
 
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
+from base_agent import BaseAgent
+
+VAULT_PATH = os.path.expanduser(
+    "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/류웅수"
+)
+AUTHOR = '"[[류웅수]]"'
+
+VALID_TYPES = {
+    "note", "study", "book", "blog", "project",
+    "daily", "meeting", "idea", "analysis", "health", "travel", "memo"
+}
 
 
-class ObsidianWriter:
-    """옵시디언 노트 작성 에이전트"""
+def build_yaml(
+    note_type: str,
+    tags: Optional[List[str]] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    표준 YAML frontmatter 생성 — 모든 에이전트가 이 함수만 사용할 것.
 
-    def __init__(self, vault_path: Optional[str] = None):
+    Args:
+        note_type : VALID_TYPES 중 하나
+        tags      : 태그 리스트 (주제태그 + 목적태그, 최대 5개)
+        extra     : 타입별 추가 필드 (camelCase 규칙)
+                    예) {"keyword": "지식산업센터", "bookAuthor": "손의찬"}
+    Returns:
+        '---\n...\n---\n' 형태의 문자열
+    """
+    if note_type not in VALID_TYPES:
+        note_type = "note"
+
+    now = datetime.now().strftime("%Y-%m-%d")
+
+    lines = ["---"]
+    lines.append(f"type: {note_type}")
+    lines.append(f"author:")
+    lines.append(f"  - {AUTHOR}")
+    lines.append(f"date created: {now}")
+    lines.append(f"date modified: {now}")
+
+    if tags:
+        clean = [t.lstrip("#").strip() for t in tags if t.strip()]
+        lines.append("tags:")
+        for t in clean:
+            lines.append(f"  - {t}")
+    else:
+        lines.append("tags: []")
+
+    if extra:
+        for k, v in extra.items():
+            if isinstance(v, list):
+                lines.append(f"{k}:")
+                for i in v:
+                    lines.append(f"  - {i}")
+            else:
+                lines.append(f"{k}: {v}")
+
+    lines.append("---")
+    return "\n".join(lines) + "\n"
+
+
+class ObsidianWriter(BaseAgent):
+    """옵시디언 노트 작성 에이전트 (BaseAgent 기반)"""
+
+    def __init__(self, vault_path: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
         """
         초기화
 
         Args:
             vault_path: 옵시디언 Vault 경로 (None이면 기본 경로 사용)
+            config: BaseAgent 호환 설정 dict (vault_path 키 지원)
         """
-        self.vault_path = vault_path or self._get_default_vault_path()
+        cfg = config or {}
+        super().__init__("obsidian_writer", cfg)
+        self.vault_path = vault_path or cfg.get("vault_path") or self._get_default_vault_path()
+
+    def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        BaseAgent.run() 인터페이스 — operation에 따라 분기
+
+        Args:
+            data: {
+                "operation": "write" | "append" | "daily",
+                "folder": str,
+                "filename": str,
+                "content": str,
+            }
+
+        Returns:
+            {"path": str} 또는 {"success": bool}
+        """
+        operation = data.get("operation", "write")
+
+        if operation == "write":
+            folder = data.get("folder", "")
+            filename = data.get("filename", "untitled.md")
+            content = data.get("content", "")
+            path = self.write_note(content, filename, folder=folder)
+            return {"path": path}
+
+        elif operation == "append":
+            filename = data.get("filename", "")
+            folder = data.get("folder", "")
+            content = data.get("content", "")
+            success = self.append_to_note(content, filename, folder=folder)
+            return {"success": success}
+
+        elif operation == "daily":
+            content = data.get("content", "")
+            date = data.get("date")
+            folder = data.get("folder", "00. Inbox")
+            path = self.create_daily_note(content, date=date, folder=folder)
+            return {"path": path}
+
+        else:
+            return {"error": f"알 수 없는 operation: {operation}"}
 
     def _get_default_vault_path(self) -> str:
         """기본 Vault 경로 반환"""
@@ -41,6 +148,42 @@ class ObsidianWriter:
 
         # 현재 디렉토리 사용
         return "."
+
+    def save_note(
+        self,
+        note_type: str,
+        title: str,
+        content: str,
+        folder: str,
+        tags: Optional[List[str]] = None,
+        extra: Optional[Dict[str, Any]] = None,
+        filename: Optional[str] = None,
+    ) -> str:
+        """
+        표준 YAML + 내용으로 노트 저장 — 권장 메서드.
+        모든 에이전트는 write_note 대신 이 메서드를 사용할 것.
+
+        Args:
+            note_type : 노트 종류 (VALID_TYPES)
+            title     : 노트 제목 (H1 헤더로 사용)
+            content   : 본문 (마크다운, YAML 없이)
+            folder    : 볼트 내 저장 폴더 경로
+            tags      : 태그 리스트
+            extra     : 타입별 추가 YAML 필드 (camelCase)
+            filename  : 파일명 (None이면 title에서 자동 생성)
+
+        Returns:
+            저장된 파일의 전체 경로
+        """
+        yaml_block = build_yaml(note_type, tags, extra)
+        full_content = yaml_block + "\n" + f"# {title}\n\n" + content
+
+        if filename is None:
+            filename = title.replace(" ", "-")
+        if not filename.endswith(".md"):
+            filename += ".md"
+
+        return self.write_note(full_content, filename, folder=folder)
 
     def write_note(
         self,
@@ -175,20 +318,7 @@ class ObsidianWriter:
         Returns:
             저장된 파일의 전체 경로
         """
-        # YAML frontmatter
-        frontmatter = f"""---
-type: project
-title: {title}
-created: {datetime.now().strftime("%Y-%m-%d")}
-"""
-
-        if tags:
-            frontmatter += f"tags: [{', '.join(tags)}]"
-
-        frontmatter += "---\n\n"
-
-        # 내용 구성
-        full_content = frontmatter + f"# {title}\n\n" + content
+        full_content = build_yaml("project", tags) + "\n" + f"# {title}\n\n" + content
 
         # 파일명 (공백을 하이픈으로 변환)
         filename = title.replace(' ', '-').lower()
@@ -217,17 +347,7 @@ created: {datetime.now().strftime("%Y-%m-%d")}
         Returns:
             저장된 파일의 전체 경로
         """
-        # YAML frontmatter
-        frontmatter = f"""---
-type: zettel
-title: {title}
-created: {datetime.now().strftime("%Y-%m-%d")}
-tags: [zettel]
----
-"""
-
-        # 내용 구성
-        full_content = frontmatter + f"# {title}\n\n" + content
+        full_content = build_yaml("note", ["zettel"]) + "\n" + f"# {title}\n\n" + content
 
         # 참고 문헌 추가
         if references:

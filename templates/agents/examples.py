@@ -7,7 +7,7 @@ BaseAgent, PipelineAgent를 활용한 에이전트 조립 방법을 보여줍니
 
 # ===== 1단계: 기본 에이전트 사용 =====
 
-from news_analyzer_v2 import NewsAnalyzer
+from news_analyzer import NewsAnalyzer
 
 # 기본 사용
 analyzer = NewsAnalyzer()

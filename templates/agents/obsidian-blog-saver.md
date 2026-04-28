@@ -48,19 +48,27 @@ You will receive:
 
 ### Step 1: Prepare Frontmatter
 
+표준 YAML 5개 필드 + 블로그 추가 필드:
+
 ```yaml
 ---
-title: [title]
-date: [YYYY-MM-DD]
+type: blog
+author:
+  - "[[류웅수]]"
+date created: YYYY-MM-DD
+date modified: YYYY-MM-DD
+tags:
+  - 블로그
+  - [keyword 기반 태그들]
 keyword: [keyword]
-status: 초안
-platform: 네이버 블로그
-tags: [블로그, 네이버, 부동산, 지식산업센터]
-images:
-  cover: images/[slug]-cover.png
-  sections: N개
 ---
 ```
+
+**규칙:**
+- `type: blog` 고정
+- `author`, `date created`, `date modified` 항상 포함
+- `status`, `platform`, `images` 필드 사용 금지 (비표준)
+- 태그는 `블로그` + keyword 관련 태그 (최대 5개)
 
 ### Step 2: Insert Cover Image
 
@@ -113,11 +121,11 @@ After each H2 heading and its content, insert the corresponding section image:
 ## Image Folder
 
 Ensure images folder exists:
-`/Users/oungsooryu/Library/Mobile Documents/iCloud~md~obsidian/Documents/류웅수/블로그 초안/images/`
+`/Users/oungsooryu/Desktop/류웅수/블로그/images/`
 
 Create if not exists using Bash tool:
 ```bash
-mkdir -p "/Users/oungsooryu/Library/Mobile Documents/iCloud~md~obsidian/Documents/류웅수/블로그 초안/images"
+mkdir -p "/Users/oungsooryu/Desktop/류웅수/블로그/images"
 ```
 
 ---

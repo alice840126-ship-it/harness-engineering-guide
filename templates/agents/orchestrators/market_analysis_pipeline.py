@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from news_scraper import NewsScraper
-from news_analyzer_v2 import NewsAnalyzer
+from news_analyzer import NewsAnalyzer
 from summarizer import Summarizer
 
 
@@ -88,6 +88,7 @@ class MarketAnalysisPipeline:
         self.categories = categories or ["부동산", "주식", "금리"]
 
         # 병렬 스크래핑 파이프라인
+        # (ParallelPipelineAgent는 observe 플래그 없으므로 외부 래핑으로 관찰성 제공)
         self.scrapers = ParallelPipelineAgent(
             name="multi_scraper",
             agents=[
@@ -95,6 +96,7 @@ class MarketAnalysisPipeline:
             ],
             merge_strategy="combine"
         )
+        self._observe = True  # run()에서 외부 observer 사용
 
         # 분석 파이프라인
         self.analyzers = ParallelPipelineAgent(
@@ -117,16 +119,44 @@ class MarketAnalysisPipeline:
         Returns:
             분석 결과
         """
-        # 1단계: 병렬 스크래핑
-        scrape_result = self.scrapers.run({"display": display})
+        # pipeline_observer 래핑 (실패해도 본 파이프라인은 계속)
+        obs = None
+        if getattr(self, "_observe", False):
+            try:
+                sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+                from pipeline_observer import PipelineObserver  # type: ignore
+                obs = PipelineObserver(
+                    pipeline="market_analysis_pipeline",
+                    keyword=",".join(self.categories)[:100],
+                )
+            except Exception as _e:
+                sys.stderr.write(f"[observer disabled] {_e}\n")
+                obs = None
 
-        print(f"📰 뉴스 수집 완료")
-        for key, value in scrape_result.items():
-            if isinstance(value, dict) and "count" in value:
-                print(f"  - {value.get('category', '')}: {value['count']}건")
+        try:
+            # 1단계: 병렬 스크래핑
+            if obs:
+                with obs.stage("parallel_scrape") as s:
+                    scrape_result = self.scrapers.run({"display": display})
+                    s.attrs(categories=self.categories, display=display)
+            else:
+                scrape_result = self.scrapers.run({"display": display})
 
-        # 2단계: 병렬 분석
-        analysis_result = self.analyzers.run(scrape_result)
+            print(f"📰 뉴스 수집 완료")
+            for key, value in scrape_result.items():
+                if isinstance(value, dict) and "count" in value:
+                    print(f"  - {value.get('category', '')}: {value['count']}건")
+
+            # 2단계: 병렬 분석
+            if obs:
+                with obs.stage("parallel_analyze") as s:
+                    analysis_result = self.analyzers.run(scrape_result)
+                    s.attrs(result_keys=list(analysis_result.keys())[:10])
+            else:
+                analysis_result = self.analyzers.run(scrape_result)
+        finally:
+            if obs:
+                obs.close("ok")
 
         # 결과 정리
         summary = {

@@ -1,154 +1,172 @@
 #!/usr/bin/env python3
 """
-웹 콘텐츠 리더 에이전트
+웹 콘텐츠 리더 에이전트 v2 (BaseAgent 기반)
 
-웹페이지 본문을 추출하는 재사용 가능한 에이전트
-trafilatura를 사용하여 깨끗한 본문 텍스트 추출
+웹페이지 본문 추출 (trafilatura 사용)
+- 단일 책임: 웹 콘텐츠 읽기만 담당
+- BaseAgent 상속으로 표준 인터페이스
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional, Any
 from urllib.parse import urlparse
+from base_agent import BaseAgent
 
-# 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class WebContentReader:
-    """웹 콘텐츠 리더 에이전트"""
+class WebContentReader(BaseAgent):
+    """웹 콘텐츠 리더 에이전트 v2"""
 
-    def __init__(self, timeout: int = 15, max_chars: int = 2000):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         초기화
 
         Args:
-            timeout: 요청 타임아웃 (초)
-            max_chars: 최대 추출 길이
+            config: 에이전트 설정 (timeout, max_chars)
         """
-        self.timeout = timeout
-        self.max_chars = max_chars
+        super().__init__("web_content_reader", config)
 
-        # trafilatura 임포트 (지연 로딩)
+        self.timeout = self.config.get("timeout", 15)
+        self.max_chars = self.config.get("max_chars", 2000)
+
         try:
             import trafilatura
             self.trafilatura = trafilatura
         except ImportError:
-            logger.error("trafilatura가 설치되지 않았습니다. pip install trafilatura")
             self.trafilatura = None
 
-    def read_content(
-        self,
-        url: str,
-        include_comments: bool = False,
-        include_tables: bool = False
-    ) -> Optional[str]:
+    def validate_input(self, data: Dict[str, Any]) -> bool:
+        """입력 검증"""
+        operation = data.get("operation", "read")
+
+        if operation == "read":
+            return "url" in data
+        elif operation == "multiple":
+            return "urls" in data
+        elif operation == "html":
+            return "html" in data
+        elif operation == "metadata":
+            return "url" in data
+        else:
+            return False
+
+    def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        단일 URL 본문 추출
+        웹 콘텐츠 읽기 처리
 
         Args:
-            url: 웹페이지 URL
-            include_comments: 댓글 포함 여부
-            include_tables: 표 포함 여부
+            data: {
+                "operation": str,           # "read", "multiple", "html", "metadata"
+                "url": str,                 # read/metadata용
+                "urls": list,               # multiple용
+                "html": str,                # html용
+                "include_comments": bool,   # 댓글 포함 (선택)
+                "include_tables": bool,     # 표 포함 (선택)
+                "skip_errors": bool         # multiple용 에러 스킵 (선택)
+            }
 
         Returns:
-            추출된 본문 텍스트 (실패 시 None)
+            operation에 따른 결과
         """
-        if not self.trafilatura:
-            logger.error("trafilatura 모듈을 사용할 수 없습니다")
-            return None
+        operation = data.get("operation", "read")
 
-        # URL 검증
+        if operation == "read":
+            return self._read_content(data)
+        elif operation == "multiple":
+            return self._read_multiple(data)
+        elif operation == "html":
+            return self._extract_from_html(data)
+        elif operation == "metadata":
+            return self._get_metadata(data)
+        else:
+            return {"error": "잘못된 operation"}
+
+    def _read_content(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """단일 URL 본문 추출"""
+        url = data["url"]
+        include_comments = data.get("include_comments", False)
+        include_tables = data.get("include_tables", False)
+
+        if not self.trafilatura:
+            return {"content": None, "error": "trafilatura 없음"}
+
         if not self._is_valid_url(url):
-            logger.warning(f"유효하지 않은 URL: {url}")
-            return None
+            return {"content": None, "error": "유효하지 않은 URL"}
 
         try:
-            # 웹페이지 다운로드
             downloaded = self.trafilatura.fetch_url(url, timeout=self.timeout)
 
             if not downloaded:
-                logger.warning(f"다운로드 실패: {url}")
-                return None
+                return {"content": None, "error": "다운로드 실패"}
 
-            # 본문 추출
             content = self.trafilatura.extract(
                 downloaded,
                 include_comments=include_comments,
                 include_tables=include_tables,
-                no_fallback=False  # 실패 시 대체 방법 사용
+                no_fallback=False
             )
 
             if content:
-                # 길이 제한
                 if len(content) > self.max_chars:
                     content = content[:self.max_chars]
 
-                logger.info(f"✅ 본문 추출 성공: {url} ({len(content)}자)")
-                return content
+                return {
+                    "content": content,
+                    "url": url,
+                    "length": len(content),
+                    "operation": "read"
+                }
             else:
-                logger.warning(f"본문 추출 실패: {url}")
-                return None
+                return {"content": None, "error": "추출 실패"}
 
         except Exception as e:
-            logger.error(f"❌ 본문 추출 오류 ({url}): {e}")
-            return None
+            return {"content": None, "error": str(e)}
 
-    def read_multiple_contents(
-        self,
-        urls: List[str],
-        include_comments: bool = False,
-        include_tables: bool = False,
-        skip_errors: bool = True
-    ) -> List[Dict[str, Optional[str]]]:
-        """
-        여러 URL 일괄 본문 추출
+    def _read_multiple(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """여러 URL 일괄 본문 추출"""
+        urls = data["urls"]
+        include_comments = data.get("include_comments", False)
+        include_tables = data.get("include_tables", False)
+        skip_errors = data.get("skip_errors", True)
 
-        Args:
-            urls: 웹페이지 URL 리스트
-            include_comments: 댓글 포함 여부
-            include_tables: 표 포함 여부
-            skip_errors: 실패 시 계속 진행 여부
-
-        Returns:
-            [{url, content, status}] 리스트
-        """
         results = []
 
         for url in urls:
-            content = self.read_content(url, include_comments, include_tables)
+            result = self._read_content({
+                "url": url,
+                "include_comments": include_comments,
+                "include_tables": include_tables,
+                "operation": "read"
+            })
 
-            status = "success" if content else "failed"
+            status = "success" if result.get("content") else "failed"
 
             results.append({
                 "url": url,
-                "content": content,
+                "content": result.get("content"),
                 "status": status
             })
 
-            # 실패 시 중단 옵션
-            if not skip_errors and not content:
-                logger.error("❌ 일괄 처리 중단")
+            if not skip_errors and not result.get("content"):
                 break
 
-        # 성공 개수 로깅
         success_count = sum(1 for r in results if r["status"] == "success")
-        logger.info(f"✅ 일괄 처리 완료: {success_count}/{len(urls)} 성공")
 
-        return results
+        return {
+            "results": results,
+            "total_count": len(urls),
+            "success_count": success_count,
+            "operation": "multiple"
+        }
 
-    def extract_main_content(self, html: str) -> Optional[str]:
-        """
-        HTML에서 본문만 추출 (이미 다운로드된 HTML)
+    def _extract_from_html(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """HTML에서 본문 추출"""
+        html = data["html"]
 
-        Args:
-            html: HTML 문자열
-
-        Returns:
-            추출된 본문 텍스트
-        """
         if not self.trafilatura:
-            return None
+            return {"content": None, "error": "trafilatura 없음"}
 
         try:
             content = self.trafilatura.extract(
@@ -160,59 +178,50 @@ class WebContentReader:
             if content and len(content) > self.max_chars:
                 content = content[:self.max_chars]
 
-            return content
+            return {
+                "content": content,
+                "length": len(content) if content else 0,
+                "operation": "html"
+            }
 
         except Exception as e:
-            logger.error(f"❌ HTML 추출 오류: {e}")
-            return None
+            return {"content": None, "error": str(e)}
 
-    def _is_valid_url(self, url: str) -> bool:
-        """
-        URL 유효성 검사
+    def _get_metadata(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """웹페이지 메타데이터 추출"""
+        url = data["url"]
 
-        Args:
-            url: 검사할 URL
-
-        Returns:
-            유효 여부
-        """
-        try:
-            result = urlparse(url)
-            return all([result.scheme, result.netloc])
-        except Exception:
-            return False
-
-    def get_metadata(self, url: str) -> Optional[Dict[str, str]]:
-        """
-        웹페이지 메타데이터 추출
-
-        Args:
-            url: 웹페이지 URL
-
-        Returns:
-            메타데이터 딕셔너리 (title, author, date, etc.)
-        """
         if not self.trafilatura:
-            return None
+            return {"metadata": None, "error": "trafilatura 없음"}
 
         try:
             downloaded = self.trafilatura.fetch_url(url, timeout=self.timeout)
 
             if not downloaded:
-                return None
+                return {"metadata": None, "error": "다운로드 실패"}
 
             metadata = self.trafilatura.extract_metadata(downloaded)
 
             if metadata:
                 return {
-                    "title": metadata.title or "",
-                    "author": metadata.author or "",
-                    "date": metadata.date or "",
-                    "url": url
+                    "metadata": {
+                        "title": metadata.title or "",
+                        "author": metadata.author or "",
+                        "date": metadata.date or "",
+                        "url": url
+                    },
+                    "operation": "metadata"
                 }
 
-            return None
+            return {"metadata": None, "error": "메타데이터 없음"}
 
         except Exception as e:
-            logger.error(f"❌ 메타데이터 추출 오류 ({url}): {e}")
-            return None
+            return {"metadata": None, "error": str(e)}
+
+    def _is_valid_url(self, url: str) -> bool:
+        """URL 유효성 검사"""
+        try:
+            result = urlparse(url)
+            return all([result.scheme, result.netloc])
+        except Exception:
+            return False

@@ -22,7 +22,9 @@ class PipelineAgent(BaseAgent):
         name: str,
         agents: List[BaseAgent],
         stop_on_error: bool = True,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        observe: bool = False,
+        observe_keyword_key: str = "query",
     ):
         """
         초기화
@@ -32,10 +34,14 @@ class PipelineAgent(BaseAgent):
             agents: 실행할 에이전트 리스트
             stop_on_error: 에러 발생 시 중지 여부 (False면 계속 실행)
             config: 추가 설정
+            observe: True 시 pipeline_observer로 JSONL 관찰성 기록
+            observe_keyword_key: 입력 dict에서 keyword로 쓸 key명 (로깅용)
         """
         super().__init__(name, config)
         self.agents = agents
         self.stop_on_error = stop_on_error
+        self.observe = observe
+        self.observe_keyword_key = observe_keyword_key
 
     def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -47,27 +53,64 @@ class PipelineAgent(BaseAgent):
         Returns:
             최종 결과 데이터
         """
-        result = deepcopy(data)
-
-        for i, agent in enumerate(self.agents):
+        # --- observer 준비 (lazy import — 순환 참조 방지) ---
+        obs = None
+        if self.observe:
             try:
-                # 각 에이전트 실행
-                result = agent.run(result)
+                import sys as _sys
+                from pathlib import Path as _Path
+                _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+                from pipeline_observer import PipelineObserver  # type: ignore
+                kw = str(data.get(self.observe_keyword_key, ""))[:100]
+                obs = PipelineObserver(pipeline=self.name, keyword=kw)
+            except Exception as _e:
+                # observer 실패는 본 파이프라인을 막지 않는다
+                import sys as _sys
+                _sys.stderr.write(f"[pipeline_observer disabled] {_e}\n")
+                obs = None
 
-                # 파이프라인 중간 결과 저장 (선택)
-                if self.config.get("save_intermediate", False):
-                    result[f"_after_{agent.name}"] = deepcopy(result)
+        result = deepcopy(data)
+        status = "ok"
 
-            except Exception as e:
-                if self.stop_on_error:
-                    raise AgentError(
-                        f"파이프라인 실행 실패 (단계 {i+1}/{len(self.agents)}: {agent.name})",
-                        self.name,
-                        {"stage": i, "agent": agent.name, "error": str(e)}
-                    )
+        try:
+            for i, agent in enumerate(self.agents):
+                if obs is not None:
+                    with obs.stage(agent.name) as s:
+                        try:
+                            result = agent.run(result)
+                            # 스테이지 출력 요약 속성
+                            s.attrs(output_keys=list(result.keys())[:10])
+                            if self.config.get("save_intermediate", False):
+                                result[f"_after_{agent.name}"] = deepcopy(result)
+                        except Exception as e:
+                            s.fail(f"{type(e).__name__}: {e}")
+                            if self.stop_on_error:
+                                status = "error"
+                                raise AgentError(
+                                    f"파이프라인 실행 실패 (단계 {i+1}/{len(self.agents)}: {agent.name})",
+                                    self.name,
+                                    {"stage": i, "agent": agent.name, "error": str(e)}
+                                )
+                            else:
+                                print(f"⚠️ [{self.name}] {agent.name} 실패, 계속 실행")
                 else:
-                    # 에러 무시하고 계속
-                    print(f"⚠️ [{self.name}] {agent.name} 실패, 계속 실행")
+                    try:
+                        result = agent.run(result)
+                        if self.config.get("save_intermediate", False):
+                            result[f"_after_{agent.name}"] = deepcopy(result)
+                    except Exception as e:
+                        if self.stop_on_error:
+                            status = "error"
+                            raise AgentError(
+                                f"파이프라인 실행 실패 (단계 {i+1}/{len(self.agents)}: {agent.name})",
+                                self.name,
+                                {"stage": i, "agent": agent.name, "error": str(e)}
+                            )
+                        else:
+                            print(f"⚠️ [{self.name}] {agent.name} 실패, 계속 실행")
+        finally:
+            if obs is not None:
+                obs.close(status)
 
         return result
 

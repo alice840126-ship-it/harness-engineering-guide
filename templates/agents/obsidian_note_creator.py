@@ -1,213 +1,168 @@
 #!/usr/bin/env python3
 """
-옵시디언 데일리 노트 생성 에이전트
-- YAML frontmatter 지원
-- 날짜 기반 폴더 구조 (YYYY/MM월/)
-- 데일리 노트 템플릿 제공
+옵시디언 데일리 노트 생성 에이전트 v2 (BaseAgent 기반)
+
+YAML frontmatter 지원 데일리 노트 생성
+- 단일 책임: 데일리 노트 생성만 담당
+- BaseAgent 상속으로 표준 인터페이스
 """
 
 from datetime import date, datetime
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
+from base_agent import BaseAgent
+from obsidian_writer import build_yaml, ObsidianWriter
 
 
-class ObsidianNoteCreator:
-    """옵시디언 데일리 노트 생성 에이전트"""
+class ObsidianNoteCreator(BaseAgent):
+    """옵시디언 데일리 노트 생성 에이전트 v2"""
 
-    def __init__(self, vault_path: str):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         초기화
 
         Args:
-            vault_path: 옵시디얼 볼트 경로
+            config: 에이전트 설정 (vault_path)
         """
-        self.vault_path = Path(vault_path)
+        super().__init__("obsidian_note_creator", config)
 
-    def create_daily_note(
-        self,
-        date: Optional[date] = None,
-        daily_note_folder: str = "30. 자원 상자/01. 데일리 노트",
-        template_type: str = "default",
-        custom_goals: Optional[List[str]] = None
-    ) -> Optional[str]:
+        self.vault_path = Path(self.config.get("vault_path",
+            Path.home() / "Library/Mobile Documents/iCloud~md~obsidian/Documents/류웅수"))
+
+    def validate_input(self, data: Dict[str, Any]) -> bool:
+        """입력 검증"""
+        operation = data.get("operation", "daily")
+
+        if operation == "daily":
+            return True  # 모든 파라미터는 선택사항
+        elif operation == "note":
+            return "filename" in data and "content" in data
+        else:
+            return False
+
+    def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        데일리 노트 생성
+        노트 생성 처리
 
         Args:
-            date: 생성할 날짜 (기본: 오늘)
-            daily_note_folder: 데일리 노트 저장 폴더 (볼트 내부 경로)
-            template_type: 템플릿 타입
-            custom_goals: 커스텀 핵심 목표
+            data: {
+                "operation": str,           # "daily", "note"
+                "date": str,                # daily용 날짜 (선택)
+                "template_type": str,       # daily용 템플릿 타입 (선택)
+                "custom_goals": list,       # daily용 커스텀 목표 (선택)
+                "filename": str,            # note용 파일명
+                "content": str,             # note용 내용
+                "folder": str,              # note용 폴더 (선택)
+                "frontmatter": dict         # note용 frontmatter (선택)
+            }
 
         Returns:
-            생성된 파일 경로 (이미 존재하면 None)
+            {"path": str, "operation": str} 또는 {"already_exists": bool}
         """
-        if date is None:
+        operation = data.get("operation", "daily")
+
+        if operation == "daily":
+            return self._create_daily_note(data)
+        elif operation == "note":
+            return self._create_note(data)
+        else:
+            return {"error": "잘못된 operation"}
+
+    def _create_daily_note(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """데일리 노트 생성"""
+        date_str = data.get("date")
+        template_type = data.get("template_type", "default")
+        custom_goals = data.get("custom_goals")
+
+        if date_str:
+            date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        else:
             date = datetime.now().date()
 
         date_str = date.strftime('%Y-%m-%d')
         filename = f"{date_str}.md"
 
-        # 날짜 기반 폴더 구조 (YYYY/MM월/)
+        daily_note_folder = "30. 자원 상자/01. 데일리 노트"
         year_month = date.strftime('%Y/%m월')
         filepath = self.vault_path / daily_note_folder / year_month / filename
 
-        # 이미 존재하면 건너뜀
         if filepath.exists():
-            return None
+            return {"already_exists": True, "path": str(filepath)}
 
-        # 디렉토리 생성
         filepath.parent.mkdir(parents=True, exist_ok=True)
-
-        # 템플릿 생성
         content = self._get_daily_note_template(date, template_type, custom_goals)
 
-        # 파일 저장
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
 
-        return str(filepath)
+        return {"path": str(filepath), "operation": "daily", "created": True}
 
-    def create_note(
-        self,
-        filename: str,
-        content: str,
-        folder: Optional[str] = None,
-        frontmatter: Optional[Dict] = None
-    ) -> Optional[str]:
-        """
-        일반 노트 생성
+    def _create_note(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """일반 노트 생성 — obsidian_writer.save_note() 경유, 표준 YAML 보장"""
+        note_type = data.get("type", "note")
+        title     = data.get("title") or data.get("filename", "untitled").replace(".md", "")
+        content   = data.get("content", "")
+        folder    = data.get("folder", "")
+        tags      = data.get("tags")
+        extra     = data.get("extra")
+        filename  = data.get("filename")
 
-        Args:
-            filename: 파일명 (확장자 제외)
-            content: 노트 내용
-            folder: 저장할 폴더 (볼트 내부 경로)
-            frontmatter: YAML frontmatter 데이터
+        writer = ObsidianWriter()
+        path = writer.save_note(
+            note_type=note_type,
+            title=title,
+            content=content,
+            folder=folder,
+            tags=tags,
+            extra=extra,
+            filename=filename,
+        )
+        return {"path": path, "operation": "note", "created": True}
 
-        Returns:
-            생성된 파일 경로 (실패하면 None)
-        """
-        # 파일명에 확장자 추가
-        if not filename.endswith('.md'):
-            filename += '.md'
-
-        # 경로 설정
-        if folder:
-            filepath = self.vault_path / folder / filename
-        else:
-            filepath = self.vault_path / filename
-
-        # 디렉토리 생성
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-
-        # YAML frontmatter 추가
-        if frontmatter:
-            yaml_block = self._format_frontmatter(frontmatter)
-            content = f"{yaml_block}\n\n{content}"
-
-        # 파일 저장
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        return str(filepath)
-
-    def _get_daily_note_template(
-        self,
-        date: date,
-        template_type: str,
-        custom_goals: Optional[List[str]]
-    ) -> str:
+    def _get_daily_note_template(self, date: date, template_type: str, custom_goals: Optional[List[str]]) -> str:
         """데일리 노트 템플릿 생성"""
         date_str = date.strftime('%Y-%m-%d')
+        weekday = date.strftime('%A')
 
-        # 기본 핵심 목표
-        default_goals = [
-            "운동",
-            "명상은 언제나 늘 가까이",
-            "나는 2026년에 공인중개사 1차 합격했다.",
-            "나는 돈이 들어오는 수많은 파이프라인으로 일하지 않아도 세계를 여행하며 문화를 즐긴다.",
-            "나는 매달 3000만원의 실적을 올린다.",
-            "나는 표현을 잘 하는 person이고, 애정표현도 잘 하며, 잘 웃는다.",
-            "주변의 생각, 말을 의식하지 말고, 내가 스스로 당당하게 열심히 살면 된다.",
-            "지금 이순간이 최고다."
-        ]
+        if custom_goals:
+            goals_text = "\n".join([f"- {goal}" for goal in custom_goals])
+        else:
+            goals_text = "- [ ] 목표 1\n- [ ] 목표 2\n- [ ] 목표 3"
 
-        # 커스텀 목표가 있으면 교체
-        goals = custom_goals if custom_goals else default_goals
+        if template_type == "default":
+            return build_yaml("daily", ["daily"]) + f"""
+# {date_str} ({weekday})
 
-        template = f"""---
-TYPE: "[[{date_str}]]"
-tags:
-  - daily-note
-date: {date_str}
-date created: {date_str}
-date modified: {date_str}
----
+## 🎯 핵심 목표
 
-## 핵심 목표
-"""
+{goals_text}
 
-        for goal in goals:
-            template += f"- {goal}\n"
+## 📋 오늘의 할 일
 
-        template += """
----
+- [ ]
+- [ ]
+- [ ]
 
-## 오늘의 개의
-
-
-### 핵심 목표
+## 💡 인사이트
 
 
 
-### 오늘의 일정
+## 📝 메모
 
-
-
----
-
-## 작업 로그
-
-
-
-
----
-
-## 아이디어 & 노트
-
-
-
-
----
-
-## 회고
-
-### 오늘의 성과 및 배운 점
-
-
-
-### 개선할 점 및 내일 할 일
 
 
 """
-        return template
+        elif template_type == "simple":
+            return f"""# {date_str}
 
-    def _format_frontmatter(self, data: Dict) -> str:
-        """YAML frontmatter 포맷팅"""
-        yaml_lines = ["---"]
+## 할 일
 
-        for key, value in data.items():
-            if isinstance(value, list):
-                yaml_lines.append(f"{key}:")
-                for item in value:
-                    yaml_lines.append(f"  - {item}")
-            elif isinstance(value, dict):
-                yaml_lines.append(f"{key}:")
-                for k, v in value.items():
-                    yaml_lines.append(f"  {k}: {v}")
-            else:
-                yaml_lines.append(f"{key}: {value}")
 
-        yaml_lines.append("---")
 
-        return "\n".join(yaml_lines)
+## 메모
+
+
+
+"""
+        else:
+            return self._get_daily_note_template(date, "default", custom_goals)

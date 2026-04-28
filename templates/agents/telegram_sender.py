@@ -1,259 +1,222 @@
 #!/usr/bin/env python3
 """
-텔레그램 발송 에이전트
+텔레그램 발송 에이전트 v2 (BaseAgent 기반)
 
 모든 텔레그램 발송을 담당하는 재사용 가능한 에이전트
+- 단일 책임: 텔레그램 발송만 담당
+- BaseAgent 상속으로 표준 인터페이스
 """
 
 import requests
 import os
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any
 from pathlib import Path
+from base_agent import BaseAgent
 
 
-class TelegramSender:
-    """텔레그램 메시지 발송 에이전트"""
+class TelegramSender(BaseAgent):
+    """텔레그램 메시지 발송 에이전트 v2"""
 
-    def __init__(self, bot_token: Optional[str] = None, chat_id: Optional[str] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         초기화
 
         Args:
-            bot_token: 텔레그램 봇 토큰 (None이면 환경변수에서 읽기)
-            chat_id: 채팅 ID (None이면 환경변수에서 읽기)
+            config: 에이전트 설정 (bot_token, chat_id)
         """
-        self.bot_token = bot_token or os.getenv("BOT_TOKEN", "")
-        self.chat_id = chat_id or os.getenv("CHAT_ID", "")
+        super().__init__("telegram_sender", config)
+
+        self.bot_token = self.config.get("bot_token") or os.getenv("BOT_TOKEN", "")
+        self.chat_id = self.config.get("chat_id") or os.getenv("CHAT_ID", "")
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
 
-    def send_message(
-        self,
-        text: str,
-        parse_mode: Optional[str] = None,
-        disable_preview: bool = True
-    ) -> bool:
+    def validate_input(self, data: Dict[str, Any]) -> bool:
+        """입력 검증"""
+        required_keys = ["message"]
+        return all(key in data for key in required_keys)
+
+    def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        기본 메시지 발송
+        텔레그램 발송 처리
 
         Args:
-            text: 메시지 내용
-            parse_mode: "HTML" 또는 "Markdown"
-            disable_preview: 링크 미리보기 비활성화
-
-        Returns:
-            성공 여부
-        """
-        try:
-            url = f"{self.base_url}/sendMessage"
-            data = {
-                "chat_id": self.chat_id,
-                "text": text,
-                "disable_web_page_preview": disable_preview
+            data: {
+                "message": str,           # 필수: 메시지 내용
+                "parse_mode": str,        # 선택: "HTML" 또는 "Markdown"
+                "disable_preview": bool,  # 선택: 링크 미리보기 비활성화
+                "type": str               # 선택: "message", "photo", "document"
             }
 
-            if parse_mode:
-                data["parse_mode"] = parse_mode
+        Returns:
+            {"success": bool, "message_id": str}
+        """
+        message_type = data.get("type", "message")
 
-            response = requests.post(url, data=data, timeout=10)
-            response.raise_for_status()
+        if message_type == "photo":
+            return self._send_photo(data)
+        elif message_type == "document":
+            return self._send_document(data)
+        else:
+            return self._send_message(data)
 
-            return True
+    def _send_message(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """메시지 발송 — 4096자 초과 시 자동 분할"""
+        text = data["message"]
+        parse_mode = data.get("parse_mode")
+        disable_preview = data.get("disable_preview", True)
+
+        # Telegram 최대 4096자 → 초과 시 4000자 단위로 분할
+        LIMIT = 4000
+        chunks = [text[i:i+LIMIT] for i in range(0, len(text), LIMIT)] if len(text) > LIMIT else [text]
+
+        try:
+            url = f"{self.base_url}/sendMessage"
+            for i, chunk in enumerate(chunks):
+                payload = {
+                    "chat_id": self.chat_id,
+                    "text": chunk,
+                    "disable_web_page_preview": disable_preview
+                }
+                if parse_mode:
+                    payload["parse_mode"] = parse_mode
+
+                response = requests.post(url, data=payload, timeout=10)
+                response.raise_for_status()
+
+            return {"success": True, "type": "message", "chunks": len(chunks)}
 
         except Exception as e:
-            print(f"텔레그램 전송 실패: {e}")
-            return False
+            raise Exception(f"텔레그램 전송 실패: {e}")
 
-    def send_html(self, html: str, disable_preview: bool = True) -> bool:
-        """
-        HTML 포맷 메시지 발송
-
-        Args:
-            html: HTML 포맷 텍스트
-            disable_preview: 링크 미리보기 비활성화
-
-        Returns:
-            성공 여부
-        """
-        return self.send_message(html, parse_mode="HTML", disable_preview=disable_preview)
-
-    def send_markdown(self, markdown: str, disable_preview: bool = True) -> bool:
-        """
-        마크다운 포맷 메시지 발송
-
-        Args:
-            markdown: 마크다운 포맷 텍스트
-            disable_preview: 링크 미리보기 비활성화
-
-        Returns:
-            성공 여부
-        """
-        return self.send_message(markdown, parse_mode="Markdown", disable_preview=disable_preview)
-
-    def send_photo(self, photo_path: Union[str, Path], caption: Optional[str] = None) -> bool:
-        """
-        사진 발송
-
-        Args:
-            photo_path: 사진 파일 경로
-            caption: 캡션 (선택)
-
-        Returns:
-            성공 여부
-        """
+    def _send_photo(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """사진 발송"""
         try:
             url = f"{self.base_url}/sendPhoto"
+            photo_path = data.get("photo_path")
+
+            if not photo_path:
+                raise ValueError("photo_path가 필요합니다")
+
             files = {"photo": open(photo_path, "rb")}
-            data = {"chat_id": self.chat_id}
+            payload = {"chat_id": self.chat_id}
 
+            caption = data.get("caption")
             if caption:
-                data["caption"] = caption
+                payload["caption"] = caption
 
-            response = requests.post(url, files=files, data=data, timeout=30)
+            response = requests.post(url, files=files, data=payload, timeout=30)
             response.raise_for_status()
 
-            return True
+            return {"success": True, "type": "photo"}
 
         except Exception as e:
-            print(f"사진 전송 실패: {e}")
-            return False
+            raise Exception(f"사진 전송 실패: {e}")
 
-    def send_document(self, file_path: Union[str, Path], caption: Optional[str] = None) -> bool:
-        """
-        문서 발송
-
-        Args:
-            file_path: 파일 경로
-            caption: 캡션 (선택)
-
-        Returns:
-            성공 여부
-        """
+    def _send_document(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """문서 발송"""
         try:
             url = f"{self.base_url}/sendDocument"
+            file_path = data.get("file_path")
+
+            if not file_path:
+                raise ValueError("file_path가 필요합니다")
+
             files = {"document": open(file_path, "rb")}
-            data = {"chat_id": self.chat_id}
+            payload = {"chat_id": self.chat_id}
 
+            caption = data.get("caption")
             if caption:
-                data["caption"] = caption
+                payload["caption"] = caption
 
-            response = requests.post(url, files=files, data=data, timeout=30)
+            response = requests.post(url, files=files, data=payload, timeout=30)
             response.raise_for_status()
 
-            return True
+            return {"success": True, "type": "document"}
 
         except Exception as e:
-            print(f"문서 전송 실패: {e}")
-            return False
-
-    def send_daily_report(
-        self,
-        title: str,
-        content: str,
-        sections: Optional[dict] = None
-    ) -> bool:
-        """
-        데일리 리포트 발송 (HTML 포맷)
-
-        Args:
-            title: 리포트 제목
-            content: 주요 내용
-            sections: 섹션별 데이터 {"섹션명": 내용}
-
-        Returns:
-            성공 여부
-        """
-        html = f"<b>{title}</b>\n\n"
-        html += f"{content}\n\n"
-
-        if sections:
-            for section_name, section_content in sections.items():
-                html += f"━━━━━━━━━━━━━━━\n\n"
-                html += f"<b>{section_name}</b>\n"
-                html += f"{section_content}\n\n"
-
-        return self.send_html(html)
-
-    def send_alert(
-        self,
-        title: str,
-        message: str,
-        emoji: str = "🚨"
-    ) -> bool:
-        """
-        알림 발송
-
-        Args:
-            title: 알림 제목
-            message: 알림 내용
-            emoji: 이모지
-
-        Returns:
-            성공 여부
-        """
-        text = f"{emoji} <b>{title}</b>\n\n{message}"
-        return self.send_html(text)
-
-    def send_news(
-        self,
-        category: str,
-        news_list: list,
-        max_count: int = 5
-    ) -> bool:
-        """
-        뉴스 발송
-
-        Args:
-            category: 뉴스 카테고리 (예: "경제", "부동산")
-            news_list: 뉴스 기사 리스트 [{"title": ..., "link": ...}]
-            max_count: 최대 전송 개수
-
-        Returns:
-            성공 여부
-        """
-        html = f"📰 <b>{category} 뉴스</b>\n\n"
-
-        for i, news in enumerate(news_list[:max_count], 1):
-            title = news.get("title", news.get("제목", ""))
-            link = news.get("link", news.get("url", "")) or news.get("링크", "")
-
-            html += f"{i}. {title}\n"
-
-            if link:
-                html += f"   {link}\n"
-
-            html += "\n"
-
-        return self.send_html(html)
+            raise Exception(f"문서 전송 실패: {e}")
 
 
-# 싱글톤 인스턴스 (기본값 사용)
-_default_sender = None
+# ── 편의 함수 ─────────────────────────────────────────────────────────────────
+
+def _get_sender() -> "TelegramSender":
+    """토큰을 자동으로 로드해 TelegramSender 인스턴스 반환.
+    ~/.claude/.env → TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 사용.
+    스크립트에서 직접 TelegramSender를 인스턴스화하지 말고 이 함수를 거칠 것.
+    """
+    from pathlib import Path as _Path
+    try:
+        from dotenv import load_dotenv as _load
+        _load(_Path.home() / ".claude" / ".env")
+    except ImportError:
+        pass
+    return TelegramSender(config={
+        "bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
+        "chat_id": os.getenv("TELEGRAM_CHAT_ID", ""),
+    })
 
 
-def get_sender() -> TelegramSender:
-    """기본 텔레그램 발송자 인스턴스 반환"""
-    global _default_sender
-    if _default_sender is None:
-        _default_sender = TelegramSender()
-    return _default_sender
+def send_telegram(text: str, parse_mode: Optional[str] = None) -> bool:
+    """텔레그램 메시지 발송 — 스크립트 공통 진입점.
+    TelegramSender를 직접 쓰지 말고 이 함수를 사용할 것.
+    API가 바뀌어도 이 함수만 수정하면 됨.
+    """
+    sender = _get_sender()
+    result = sender.run({"message": text, "parse_mode": parse_mode, "type": "message"})
+    return result.get("success", False)
 
 
-# 편의 함수
+def send_telegram_html(text: str) -> bool:
+    """HTML 형식 텔레그램 발송"""
+    return send_telegram(text, parse_mode="HTML")
+
+
+def send_telegram_chunks(text: str, parse_mode: Optional[str] = None, max_len: int = 3900) -> bool:
+    """긴 메시지를 자동 분할해서 발송"""
+    if len(text) <= max_len:
+        return send_telegram(text, parse_mode=parse_mode)
+    sender = _get_sender()
+    parts, current = [], ""
+    for line in text.split("\n\n"):
+        if len(current) + len(line) + 2 > max_len:
+            parts.append(current.strip())
+            current = line
+        else:
+            current += ("\n\n" + line) if current else line
+    if current.strip():
+        parts.append(current.strip())
+    success = True
+    for i, part in enumerate(parts, 1):
+        prefix = f"[{i}/{len(parts)}]\n" if len(parts) > 1 else ""
+        result = sender.run({"message": prefix + part, "parse_mode": parse_mode, "type": "message"})
+        if not result.get("success", False):
+            success = False
+    return success
+
+
+# 하위 호환 유지 (기존 코드 호환)
 def send_message(text: str, parse_mode: Optional[str] = None) -> bool:
-    """메시지 발송 (편의 함수)"""
-    return get_sender().send_message(text, parse_mode)
+    """하위 호환용. send_telegram() 사용 권장."""
+    return send_telegram(text, parse_mode)
 
 
 def send_html(html: str) -> bool:
-    """HTML 발송 (편의 함수)"""
-    return get_sender().send_html(html)
+    """하위 호환용. send_telegram_html() 사용 권장."""
+    return send_telegram_html(html)
 
 
 def send_daily_report(title: str, content: str, sections: Optional[dict] = None) -> bool:
     """데일리 리포트 발송 (편의 함수)"""
-    return get_sender().send_daily_report(title, content, sections)
+    html = f"<b>{title}</b>\n\n{content}\n\n"
+
+    if sections:
+        for section_name, section_content in sections.items():
+            html += f"━━━━━━━━━━━━━━━\n\n<b>{section_name}</b>\n{section_content}\n\n"
+
+    return send_html(html)
 
 
 def send_alert(title: str, message: str, emoji: str = "🚨") -> bool:
     """알림 발송 (편의 함수)"""
-    return get_sender().send_alert(title, message, emoji)
+    html = f"{emoji} <b>{title}</b>\n\n{message}"
+    return send_html(html)

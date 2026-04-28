@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-컨텍스트 수집 에이전트
-- Claude 세션 기록에서 패턴 추출
-- 결정, 선호도, 반복 패턴, 인사이트 자동 수집
-- Shared Context 자동 업데이트
+컨텍스트 수집 에이전트 v2 (BaseAgent 기반)
+
+Claude 세션 기록에서 패턴 추출
+- 단일 책임: 컨텍스트 수집만 담당
+- BaseAgent 상속으로 표준 인터페이스
 """
 
 import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
+from base_agent import BaseAgent
 
 
-class ContextCollector:
-    """컨텍스트 수집 에이전트"""
+class ContextCollector(BaseAgent):
+    """컨텍스트 수집 에이전트 v2"""
 
     # 기본 패턴 정의
     DEFAULT_PATTERNS = {
@@ -38,46 +40,74 @@ class ContextCollector:
         ]
     }
 
-    def __init__(
-        self,
-        history_file: Optional[str] = None,
-        patterns_file: Optional[str] = None,
-        shared_context_path: Optional[str] = None
-    ):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         초기화
 
         Args:
-            history_file: Claude 세션 기록 파일 경로
-            patterns_file: 학습된 패턴 저장 파일 경로
-            shared_context_path: Shared Context 파일 경로
+            config: 에이전트 설정 (history_file, patterns_file, shared_context_path)
         """
-        self.history_file = Path(history_file) if history_file else Path.home() / ".claude" / "history.jsonl"
-        self.patterns_file = Path(patterns_file) if patterns_file else Path.home() / ".claude" / "learned_patterns.json"
-        self.shared_context_path = Path(shared_context_path) if shared_context_path else Path.home() / ".claude-unified" / "shared_context.md"
+        super().__init__("context_collector", config)
 
-    def collect_context(
-        self,
-        patterns: Optional[Dict[str, List[str]]] = None,
-        limit: int = 50
-    ) -> Dict[str, List[str]]:
+        self.history_file = Path(self.config.get("history_file",
+            Path.home() / ".claude" / "history.jsonl"))
+        self.patterns_file = Path(self.config.get("patterns_file",
+            Path.home() / ".claude" / "learned_patterns.json"))
+        self.shared_context_path = Path(self.config.get("shared_context_path",
+            Path.home() / ".claude-unified" / "shared_context.md"))
+
+    def validate_input(self, data: Dict[str, Any]) -> bool:
+        """입력 검증"""
+        operation = data.get("operation", "collect")
+
+        if operation == "collect":
+            return True  # patterns, limit은 선택사항
+        elif operation == "save":
+            return "findings" in data
+        elif operation == "update_shared":
+            return "insights" in data
+        else:
+            return False
+
+    def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        컨텍스트 수집
+        컨텍스트 수집 처리
 
         Args:
-            patterns: 커스텀 패턴 정의
-            limit: 분석할 최근 세션 수
+            data: {
+                "operation": str,           # "collect", "save", "update_shared"
+                "patterns": dict,            # 커스텀 패턴 (선택)
+                "limit": int,                # 분석할 최근 세션 수 (선택)
+                "findings": dict,            # save용
+                "insights": str              # update_shared용
+            }
 
         Returns:
-            발견한 패턴 {"결정": [], "선호도": [], "패턴": [], "인사이트": []}
+            {"findings": dict, "operation": str} 또는 {"success": bool}
         """
+        operation = data.get("operation", "collect")
+
+        if operation == "collect":
+            return self._collect_context(data)
+        elif operation == "save":
+            return self._save_patterns(data)
+        elif operation == "update_shared":
+            return self._update_shared_context(data)
+        else:
+            return {"findings": {}, "error": "잘못된 operation"}
+
+    def _collect_context(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """컨텍스트 수집"""
+        patterns = data.get("patterns")
+        limit = data.get("limit", 50)
+
         # 패턴 설정
         pattern_dict = patterns if patterns else self.DEFAULT_PATTERNS
 
         # 최근 세션 로드
         sessions = self._load_recent_history(limit)
 
-        # 패턴 분석 - 패턴의 모든 키로 초기화
+        # 패턴 분석
         all_findings = {key: [] for key in pattern_dict.keys()}
 
         for session in sessions:
@@ -86,7 +116,65 @@ class ContextCollector:
                 if key in findings:
                     all_findings[key].extend(findings[key])
 
-        return all_findings
+        return {
+            "findings": all_findings,
+            "operation": "collect",
+            "sessions_analyzed": len(sessions)
+        }
+
+    def _save_patterns(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """패턴 저장"""
+        findings = data["findings"]
+
+        try:
+            patterns_data = {}
+            if self.patterns_file.exists():
+                with open(self.patterns_file, 'r', encoding='utf-8') as f:
+                    patterns_data = json.load(f)
+
+            today = datetime.now().strftime("%Y-%m-%d")
+            if today not in patterns_data:
+                patterns_data[today] = {}
+
+            for key, value in findings.items():
+                if value:
+                    patterns_data[today][key] = value
+
+            self.patterns_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.patterns_file, 'w', encoding='utf-8') as f:
+                json.dump(patterns_data, f, ensure_ascii=False, indent=2)
+
+            return {"success": True, "operation": "save"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _update_shared_context(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Shared Context 업데이트"""
+        insights = data["insights"]
+
+        if not self.shared_context_path.exists():
+            return {"success": False, "error": "Shared Context 파일 없음"}
+
+        try:
+            with open(self.shared_context_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            if "## 학습된 패턴" not in content:
+                content += f"\n\n## 학습된 패턴\n\n{insights}\n"
+            else:
+                content = re.sub(
+                    r"## 학습된 패턴\n\n.*?(?=\n\n##|\n*$)",
+                    f"## 학습된 패턴\n\n{insights}",
+                    content,
+                    flags=re.DOTALL
+                )
+
+            with open(self.shared_context_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            return {"success": True, "operation": "update_shared"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def _load_recent_history(self, limit: int = 50) -> List[Dict]:
         """최근 세션 기록 로드"""
@@ -105,16 +193,10 @@ class ContextCollector:
 
         return sessions
 
-    def _analyze_session(
-        self,
-        session: Dict,
-        patterns: Dict[str, List[str]]
-    ) -> Dict[str, List[str]]:
+    def _analyze_session(self, session: Dict, patterns: Dict[str, List[str]]) -> Dict[str, List[str]]:
         """세션 분석"""
-        # 패턴의 모든 키를 포함하여 findings 초기화
         findings = {key: [] for key in patterns.keys()}
 
-        # 사용자 메시지 분석
         for msg in session.get("messages", []):
             if msg.get("role") == "user":
                 content = msg.get("content", "")
@@ -124,26 +206,10 @@ class ContextCollector:
                         if key in extracted:
                             findings[key].extend(extracted[key])
 
-        # Assistant 응답에서도 문맥 추출
-        for msg in session.get("messages", []):
-            if msg.get("role") == "assistant":
-                content = msg.get("content", "")
-                if isinstance(content, str):
-                    # "형님이 ~라고 했습니다" 같은 문맥에서 추출
-                    extracted = self._extract_patterns(content, patterns)
-                    for key in findings:
-                        if key in extracted:
-                            findings[key].extend(extracted[key])
-
         return findings
 
-    def _extract_patterns(
-        self,
-        text: str,
-        patterns: Dict[str, List[str]]
-    ) -> Dict[str, List[str]]:
+    def _extract_patterns(self, text: str, patterns: Dict[str, List[str]]) -> Dict[str, List[str]]:
         """텍스트에서 패턴 추출"""
-        # 패턴의 모든 키를 포함하여 findings 초기화
         findings = {key: [] for key in patterns.keys()}
 
         for category, pattern_list in patterns.items():
@@ -153,77 +219,3 @@ class ContextCollector:
                     findings[category].extend(matches)
 
         return findings
-
-    def generate_insights(self, findings: Dict[str, List[str]]) -> str:
-        """발견한 패턴에서 인사이트 생성"""
-        insights = []
-
-        # 결정 패턴
-        if findings["결정"]:
-            insights.append("### 최근 결정\n")
-            insights.append(f"- 최근 {len(findings['결정'])}개의 결정 패턴 발견\n")
-
-        # 선호도
-        if findings["선호도"]:
-            insights.append("### 선호도\n")
-            insights.append(f"- {len(findings['선호도'])}개의 선호도 패턴 발견\n")
-
-        # 반복 패턴
-        if findings["패턴"]:
-            insights.append("### 반복 패턴\n")
-            insights.append(f"- {len(findings['패턴'])}개의 반복 패턴 발견\n")
-
-        # 비즈니스 인사이트
-        if findings["인사이트"]:
-            insights.append("### 비즈니스 인사이트\n")
-            insights.append(f"- {len(findings['인사이트'])}개의 인사이트 발견\n")
-
-        return "\n".join(insights)
-
-    def save_patterns(self, findings: Dict[str, List[str]]) -> None:
-        """발견한 패턴 저장"""
-        patterns_data = {}
-
-        if self.patterns_file.exists():
-            with open(self.patterns_file, 'r', encoding='utf-8') as f:
-                try:
-                    patterns_data = json.load(f)
-                except json.JSONDecodeError:
-                    patterns_data = {}
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        if today not in patterns_data:
-            patterns_data[today] = {}
-
-        for key, value in findings.items():
-            if value:
-                patterns_data[today][key] = value
-
-        self.patterns_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.patterns_file, 'w', encoding='utf-8') as f:
-            json.dump(patterns_data, f, ensure_ascii=False, indent=2)
-
-    def update_shared_context(self, insights: str) -> bool:
-        """Shared Context 업데이트"""
-        if not self.shared_context_path.exists():
-            return False
-
-        with open(self.shared_context_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # "학습된 패턴" 섹션이 없으면 추가
-        if "## 학습된 패턴" not in content:
-            content += f"\n\n## 학습된 패턴\n\n{insights}\n"
-        else:
-            # 기존 섹션 업데이트
-            content = re.sub(
-                r"## 학습된 패턴\n\n.*?(?=\n\n##|\n*$)",
-                f"## 학습된 패턴\n\n{insights}",
-                content,
-                flags=re.DOTALL
-            )
-
-        with open(self.shared_context_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        return True

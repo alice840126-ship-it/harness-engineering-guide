@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-뉴스 분석 에이전트
+뉴스 분석 에이전트 (BaseAgent 기반 리팩토링 버전)
 
 뉴스 기사들을 분석해서 키워드 추출, 테마 그룹핑, 인사이트 도출
 - 단일 책임: 뉴스 분석만 담당 (스크래핑, 발송은 다른 에이전트)
@@ -9,28 +9,85 @@
 import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from base_agent import BaseAgent
 
 
-class NewsAnalyzer:
-    """뉴스 분석 에이전트"""
+class NewsAnalyzer(BaseAgent):
+    """뉴스 분석 에이전트 (BaseAgent 상속)"""
 
-    def __init__(self):
-        """초기화"""
-        # 투자 키워드 사전
-        self.investment_keywords = {
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        초기화
+
+        Args:
+            config: 에이전트 설정 (키워드 사전 등)
+        """
+        super().__init__("news_analyzer", config)
+
+        # 투자 키워드 사전 (설정으로 덮어쓰기 가능)
+        self.investment_keywords = self.config.get("keywords", {
             'AI': ['AI', '인공지능', 'LLM', 'GPT', 'Claude', '삼성전자', 'SK하이닉스', 'HBM', '반도체'],
             '에너지': ['유가', '석유', '전력', '희토류', '원자력', '에너지', '발전'],
             '부동산': ['아파트', '분양', '청약', '재건축', '집값', '전세', '매매', '건설'],
             '금융': ['금리', '코스피', '코스닥', '주식', '주주', '펀드', '채권', '연준', '인플레'],
             '지정학': ['이란', '중동', '미국', '중국', '러시아', '무역', '지정학', '공급망'],
             '테마': ['테마', '섹터', '소재', '대표', '우량', '성장', '상승', '하락', '변동성'],
-        }
+        })
 
         # 전망/예측 키워드
         self.outlook_keywords = [
             '전망', '예상', '예측', '전망됨', '시나리오',
             '목표가', '투자의견', '매수', '매도', '홀드'
         ]
+
+    def validate_input(self, data: Dict[str, Any]) -> bool:
+        """입력 검증"""
+        required_keys = ["articles"]
+        return all(key in data for key in required_keys)
+
+    def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        뉴스 분석 처리
+
+        Args:
+            data: {"articles": [기사리스트], "operation": "키워드추출|테마|인사이트"}
+
+        Returns:
+            분석 결과
+        """
+        articles = data["articles"]
+        operation = data.get("operation", "insights")
+
+        if operation == "keywords":
+            return self._extract_keywords_from_articles(articles)
+        elif operation == "themes":
+            return self._group_themes(articles)
+        elif operation == "insights":
+            themes = self._group_themes(articles)
+            return self._derive_insights(themes, data.get("date_range", "최근"))
+        else:
+            return {"error": f"잘못된 operation: {operation}"}
+
+    def _extract_keywords_from_articles(self, articles: List[Dict]) -> Dict[str, Any]:
+        """기사들에서 키워드 추출"""
+        all_keywords = []
+
+        for article in articles:
+            text = article.get('title', '') + ' ' + article.get('content', '')
+            keywords = self.extract_keywords(text)
+            all_keywords.extend(keywords)
+
+        return {"keywords": all_keywords}
+
+    def _group_themes(self, articles: List[Dict]) -> Dict[str, Any]:
+        """테마 그룹핑"""
+        return {"themes": self.group_by_theme(articles)}
+
+    def _derive_insights(self, themes: Dict, date_range: str) -> Dict[str, Any]:
+        """인사이트 도출"""
+        return {"insights": self.derive_insights(themes, date_range)}
+
+    # ===== 기존 메서드들 =====
 
     def extract_keywords(
         self,
@@ -59,7 +116,7 @@ class NewsAnalyzer:
         keyword_counts = Counter(found_keywords)
         top_keywords = keyword_counts.most_common(max_keywords)
 
-        return [kw[0] for kw in top_keywords]  # (category, keyword) 튜플 반환
+        return [kw[0] for kw in top_keywords]
 
     def group_by_theme(
         self,
@@ -174,168 +231,3 @@ class NewsAnalyzer:
             })
 
         return insights
-
-    def analyze_outlook(
-        self,
-        text: str
-    ) -> Optional[str]:
-        """
-        텍스트에서 전망/예측 추출
-
-        Args:
-            text: 분석할 텍스트
-
-        Returns:
-            전망 문장 (없으면 None)
-        """
-        sentences = re.split(r'(?<=[.!?])', text)
-
-        for sentence in sentences:
-            # 전망 키워드 포함 문장 찾기
-            if any(keyword in sentence for keyword in self.outlook_keywords):
-                # 문장 정제
-                clean_sentence = sentence.strip()
-                if len(clean_sentence) > 20:
-                    return clean_sentence
-
-        return None
-
-    def calculate_sentiment(
-        self,
-        text: str
-    ) -> Dict[str, Any]:
-        """
-        텍스트 감성 분석 (간단 버전)
-
-        Args:
-            text: 분석할 텍스트
-
-        Returns:
-            감성 점수 딕셔너리
-        """
-        # 긍정 키워드
-        positive_keywords = [
-            '상승', '성장', '호조', '개선', '증가', '확대',
-            '최고', '신고', '돌파', '달성', '성공'
-        ]
-
-        # 부정 키워드
-        negative_keywords = [
-            '하락', '위축', '악화', '감소', '축소', '위기',
-            '우려', '부진', '약세', '하락세', '타격'
-        ]
-
-        positive_count = sum(1 for kw in positive_keywords if kw in text)
-        negative_count = sum(1 for kw in negative_keywords if kw in text)
-
-        total = positive_count + negative_count
-
-        if total == 0:
-            return {
-                'score': 0,
-                'label': '중립',
-                'positive': 0,
-                'negative': 0
-            }
-
-        score = (positive_count - negative_count) / total
-
-        if score > 0.3:
-            label = '긍정'
-        elif score < -0.3:
-            label = '부정'
-        else:
-            label = '중립'
-
-        return {
-            'score': score,
-            'label': label,
-            'positive': positive_count,
-            'negative': negative_count
-        }
-
-    def generate_summary(
-        self,
-        articles: List[Dict[str, Any]],
-        max_sentences: int = 5
-    ) -> str:
-        """
-        기사들을 종합해서 요약 생성
-
-        Args:
-            articles: 기사 리스트
-            max_sentences: 최대 문장 수
-
-        Returns:
-            요약 텍스트
-        """
-        if not articles:
-            return "분석할 기사가 없습니다."
-
-        # 모든 기사 제목 추출
-        titles = [a.get('title', '') for a in articles[:10]]
-
-        # 문장 분리
-        all_sentences = []
-        for title in titles:
-            sentences = re.split(r'(?<=[.!?])', title)
-            all_sentences.extend([s.strip() for s in sentences if s.strip()])
-
-        # 상위 N개 선택
-        top_sentences = all_sentences[:max_sentences]
-
-        return ' '.join(top_sentences)
-
-    def analyze_trend(
-        self,
-        articles: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        기사들의 트렌드 분석
-
-        Args:
-            articles: 기사 리스트
-
-        Returns:
-            트렌드 분석 결과
-        """
-        if not articles:
-            return {'trend': '없음', 'strength': 0}
-
-        # 키워드 빈도 분석
-        keyword_counts = {}
-
-        for article in articles:
-            keywords = self.extract_keywords(
-                article.get('title', '') + ' ' + article.get('content', '')
-            )
-
-            for category, keyword in keywords:
-                key = f"{category}:{keyword}"
-                keyword_counts[key] = keyword_counts.get(key, 0) + 1
-
-        if not keyword_counts:
-            return {'trend': '없음', 'strength': 0}
-
-        # 가장 빈도 높은 키워드
-        top_keyword = max(keyword_counts.items(), key=lambda x: x[1])
-
-        # 강도 계산 (0~1)
-        strength = min(top_keyword[1] / len(articles), 1.0)
-
-        return {
-            'trend': top_keyword[0],
-            'strength': strength,
-            'article_count': top_keyword[1]
-        }
-
-
-# 편의 함수
-def analyze_news_themes(articles: List[Dict]) -> Dict:
-    """뉴스 테마 분석 (편의 함수)"""
-    return NewsAnalyzer().group_by_theme(articles)
-
-
-def derive_insights(themes: Dict, date_range: str) -> List:
-    """인사이트 도출 (편의 함수)"""
-    return NewsAnalyzer().derive_insights(themes, date_range)
